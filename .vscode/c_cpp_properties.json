@@ -1,0 +1,18 @@
+{
+  "configurations": [
+      {
+          "name": "Linux",
+          "includePath": [
+              "${default}",
+              "${workspaceFolder}",
+              "${workspaceFolder}/test/",
+              "${workspaceFolder}/test/parlaylib/include",
+              "${workspaceFolder}/test/CPAM/include",
+              "${workspaceFolder}/test/CPAM/examples/graphs/aspen"
+          ],
+          "defines": [],
+          "intelliSenseMode": "linux-clang-x64"
+      }
+  ],
+  "version": 4
+}

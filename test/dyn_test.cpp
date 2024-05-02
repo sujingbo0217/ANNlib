@@ -63,11 +63,11 @@ struct desc{
 		return DescLegacy::distance(cu, cv, dim);
 	}
 
-	template<typename Nid, class Ext>
-	using graph_t = ANN::graph::adj_seq<Nid,Ext>;
+	template<typename Nid, class Ext, class Edge=Nid>
+	using graph_t = ANN::graph::adj_seq<Nid,Ext,Edge>;
 
-	template<typename Nid, class Ext>
-	using graph_aux = ANN::graph::adj_map<Nid,Ext>;
+	template<typename Nid, class Ext, class Edge=Nid>
+	using graph_aux = ANN::graph::adj_map<Nid,Ext,Edge>;
 };
 
 template<class DescLegacy>
@@ -324,7 +324,8 @@ int main(int argc, char **argv)
 	auto run_test_helper = [&](auto type){ // emulate a generic lambda in C++20
 		using T = decltype(type);
 		if(!strcmp(dist_func,"L2"))
-			run_test<desc_cpam<descr_l2<T>>>(parameter);
+			// run_test<desc_cpam<descr_l2<T>>>(parameter);
+			run_test<desc<descr_l2<T>>>(parameter);
 		/*
 		else if(!strcmp(dist_func,"angular"))
 			run_test<desc<descr_ang<T>>>(parameter);
