@@ -234,27 +234,57 @@ void calc_recall(const S1 &q, const S2 &res, const S3 &gt, uint32_t k)
 }
 
 template<typename U>
-void run_test(commandLine parameter) // intend to be pass-by-value manner
+void run_test(commandLine parameter, const char* index) // intend to be pass-by-value manner
 {
 	const char *file_in = parameter.getOptionValue("-in");
 	const size_t size_init = parameter.getOptionLongValue("-init", 0);
 	const size_t size_step = parameter.getOptionLongValue("-step", 0);
 	size_t size_max = parameter.getOptionLongValue("-max", 0);
-	const float m_l = parameter.getOptionDoubleValue("-ml", 0.36);
+	float m_l = parameter.getOptionDoubleValue("-ml", 0.36);
 	const uint32_t m = parameter.getOptionIntValue("-m", 40);
 	const uint32_t efc = parameter.getOptionIntValue("-efc", 60);
-	const float alpha = parameter.getOptionDoubleValue("-alpha", 1);
+	float alpha = parameter.getOptionDoubleValue("-alpha", 1);
 	const float batch_base = parameter.getOptionDoubleValue("-b", 2);
 	const char* file_query = parameter.getOptionValue("-q");
 	const uint32_t k = parameter.getOptionIntValue("-k", 10);
 	const uint32_t ef = parameter.getOptionIntValue("-ef", m*20);
+	const char* file_label_in = parameter.getOptionValue("-lb");
+	const char* file_label_query = parameter.getOptionValue("-lq");
+
+	bool filtered = false;
+	if (!strcmp(index, "filtered-vamana")) {
+		filtered = true;
+		m_l = 0.0;	// only one layer (the base layer for hnsw)
+		alpha = 0.82;
+	} else if (!strcmp(index, "hnsw")) {
+		// post filtering
+	} else if (!strcmp(index, "filtered-hnsw")) {
+		// what we are doing...
+		filtered = true;
+	}
+	if (filtered && (file_label_in == NULL || file_label_query == NULL)) {
+		std::cerr << "No label files for base/query" << std::endl;
+		parameter.badArgument();
+	}
+
+	printf("Index: %s\n", index);
 	
 	parlay::internal::timer t("run_test:prepare", true);
 
+	// load label for each point in base
+	// [idx: [l_1, l_2, ...]] (0-index)
+	using L = typename U::point_t::label_t;
+	auto [F_b, P] = load_label<L>(file_label_in, size_max);	// P: stitched index
+	t.next("Load base labels");
+	printf("Load: %lu points\n", F_b.size());
+
+	// load all points coordinate as ps (point set)
 	using T = typename U::point_t::elem_t;
 	auto [ps,dim] = load_point(file_in, to_point<T>, size_max);
 	t.next("Load the base set");
 	printf("%s: [%lu,%u]\n", file_in, ps.size(), dim);
+
+	assert(F_b.size() == ps.size());
 
 	if(ps.size()<size_max)
 	{
@@ -262,14 +292,23 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 		printf("size_max is corrected to %lu\n", size_max);
 	}
 
+	// load query
+	auto [F_q, _] = load_label<L>(file_label_query);
+	t.next("Load query labels");
+	printf("Load: %lu points\n", F_q.size());
+
 	auto [q,_] = load_point(file_query, to_point<T>);
 	t.next("Load queries");
 	printf("%s: [%lu,%u]\n", file_query, q.size(), _);
 
+	assert(F_q.size() == q.size());
+
+	// parallel prefetch
 	visit_point(ps, size_max, dim);
 	visit_point(q, q.size(), dim);
 	t.next("Prefetch vectors");
 
+	// TODO: build graph index
 	HNSW<U> g(dim, m_l, m, efc, alpha);
 	std::vector<HNSW<U>> snapshots;
 	puts("Initialize HNSW");
@@ -321,11 +360,14 @@ int main(int argc, char **argv)
 	);
 
 	const char *dist_func = parameter.getOptionValue("-dist");
+
+	const char* index = parameter.getOptionValue("-idx");	// filtered-vamana, hnsw, filtered-hnsw
+
 	auto run_test_helper = [&](auto type){ // emulate a generic lambda in C++20
 		using T = decltype(type);
 		if(!strcmp(dist_func,"L2"))
 			// run_test<desc_cpam<descr_l2<T>>>(parameter);
-			run_test<desc<descr_l2<T>>>(parameter);
+			run_test<desc<descr_l2<T>>>(parameter, index);
 		/*
 		else if(!strcmp(dist_func,"angular"))
 			run_test<desc<descr_ang<T>>>(parameter);

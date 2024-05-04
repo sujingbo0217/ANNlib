@@ -65,6 +65,8 @@ class HNSW
 	using edge = HNSW_details::edge<nid_t>;
 	using search_control = algo::search_control;
 	using prune_control = algo::prune_control;
+	
+	using label_t = typename point_t::label_t;
 
 	template<typename T>
 	using seq = typename cm::seq<T>;
@@ -131,7 +133,7 @@ private:
 		const coord_t& get_coord() const{
 			return coord;
 		}
-	};
+	};	// nodes of base layer (layer_0)
 
 	using graph_fat = typename Desc::graph_t<nid_t,node_fat,edge>;
 	using graph_lite = typename Desc::graph_aux<nid_t,node_lite,edge>;

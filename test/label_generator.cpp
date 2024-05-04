@@ -166,7 +166,7 @@ int main(int argc, char** argv) {
   uint64_t num_points = P.getOptionIntValue("-num_points", -1);
   if (num_points <= 0) P.badArgument();
   uint32_t num_labels = P.getOptionIntValue("-num_labels", -1);
-  if (num_labels <= 0 || num_labels > 5000) P.badArgument();
+  if (num_labels <= 0) P.badArgument();
   char* dist_type = P.getOptionValue("-distribution_type");
   if (dist_type == NULL) P.badArgument();
   std::string distribution_type = std::string(dist_type);
@@ -180,6 +180,9 @@ int main(int argc, char** argv) {
       std::cerr << "Error: could not open output file " << output_file << std::endl;
       return -1;
     }
+    
+    // add total points to the first line
+    outfile << num_points << std::endl;
 
     if (distribution_type == "zipf") {
       ZipfDistribution zipf(num_points, num_labels);
