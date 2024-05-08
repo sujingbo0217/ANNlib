@@ -54,6 +54,7 @@ namespace ANN{
 template<class Desc>
 class vamana
 {
+	public:
 	using cm = custom<typename lookup_custom_tag<Desc>::type>;
 
 	typedef uint32_t nid_t;
@@ -97,7 +98,7 @@ public:
 	void insert(Iter begin, Iter end, float batch_base=2);
 	
 	template<typename Iter>
-	void insert(Iter begin, Iter end, float batch_base=2, const std::vector<label_t>& F);
+	void insert(Iter begin, Iter end, const std::vector<label_t>& F, float batch_base=2);
 
 	void insert(const nid_t& nid, const coord_t& coord, const std::vector<label_t>& F);
 
@@ -142,7 +143,9 @@ private:
 
 	using graph_t = typename Desc::graph_t<nid_t,node_t,edge>;
 
+	public:
 	graph_t g;
+	private:
 	map::direct<pid_t,nid_t> id_map;
 
 	seq<nid_t> entrance; // To init
@@ -245,20 +248,20 @@ public:
 		});
 	}
 
-	bool is_point_existed(nid_t nid) const {
+	bool is_node_existed(nid_t nid) const {
 		return (existed_points.find(nid) != existed_points.end());
 	}
 
 	bool is_point_existed(pid_t pid) const {
-		return (existed_points.find(id_map.get_nid(pid)) != existed_points.end());
+		return is_node_existed(id_map.get_nid(pid));
 	}
 
 	void set_point(pid_t pid) {
-		is_point_existed.insert(pid);
+		existed_points.insert(pid);
 	}
 
-	void set_point(nid_t nid) {
-		is_point_existed.insert(id_map.get_pid(nid));
+	void set_node(nid_t nid) {
+		set_point(id_map.get_pid(nid));
 	}
 };
 
@@ -329,7 +332,7 @@ void vamana<Desc>::insert(Iter begin, Iter end, float batch_base)
 
 template<class Desc>
 template<typename Iter>
-void vamana<Desc>::insert(Iter begin, Iter end, float batch_base, const std::vector<label_t>& F)
+void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<label_t>& F, float batch_base)
 {
 	static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
 	static_assert(std::is_base_of_v<
@@ -344,6 +347,10 @@ void vamana<Desc>::insert(Iter begin, Iter end, float batch_base, const std::vec
 	auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto){
 		return *(begin+perm[i]);
 	});
+
+	for (auto it = begin; it != end; it++) {
+		set_point(it->get_id());
+	}
 
 	size_t cnt_skip = 0;
 	if(g.empty())
@@ -390,7 +397,7 @@ void vamana<Desc>::insert(Iter begin, Iter end, float batch_base, const std::vec
 template<class Desc>
 void vamana<Desc>::insert(const nid_t& nid, const coord_t& coord, const std::vector<label_t>& F) {
 	id_map.insert(static_cast<pid_t>(nid));
-	set_point(nid);
+	set_node(nid);
 	g.add_node(nid, node_t{ coord, F });
 }
 
@@ -614,7 +621,7 @@ Seq vamana<Desc>::search(
 {
 	seq<nid_t> eps = entrance;
 	// auto nbhs = beamSearch(gen_f_nbhs(g), gen_f_dist(cq), eps, ef, ctrl);
-	auto nbhs = beamSearch(gen_f_nbhs(g), gen_f_dist(cq), get_f_label(cq), eps, ef, F, sctrl);
+	auto nbhs = beamSearch(gen_f_nbhs(g), gen_f_dist(cq), get_f_label(cq), eps, ef, F, ctrl);
 
 	nbhs = algo::prune_simple(std::move(nbhs), k/*, ctrl*/); // TODO: set ctrl
 	cm::sort(nbhs.begin(), nbhs.end());

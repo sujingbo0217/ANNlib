@@ -332,7 +332,7 @@ public:
 		);
 	}
 	template<class F>
-	void for_each(F &&f){
+	void for_each_nid(F &&f){
 		cm::parallel_for(0, nodes.size(),
 			[&,it=nodes.begin()](size_t i){
 				f(nid_t(i));
@@ -416,8 +416,8 @@ public:
 		});
 	}
 	template<class F>
-	void for_each(F &&f){
-		util::for_each(nodes, [&](auto &p){
+	void for_each_nid(F &&f){
+		util::for_each(nodes, [&](size_t i){
 			f(nid_t(i));
 		});
 	}

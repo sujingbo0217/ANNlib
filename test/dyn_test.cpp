@@ -23,6 +23,7 @@
 #include "parlay.hpp"
 #include "benchUtils.h"
 #include "cpam.hpp"
+
 using ANN::vamana;
 
 parlay::sequence<size_t> per_visited;
@@ -479,7 +480,7 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 		printf("size_max is corrected to %lu\n", size_max);
 	}
 
-	auto [F_q, _] = load_label<L>(file_label_query);	// TODO: load_label
+	auto [F_q, _pq] = load_label<L>(file_label_query);
 	t.next("Load query labels");
 	printf("Load %lu query points\n", F_q.size());
 
@@ -497,9 +498,9 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	puts("Initialize base vamana");
 
 	auto Merge = [&](const vamana<U>& from, vamana<U>& to) {
-		from.g.for_each([&](typename vamana<U>::nid_t nid)) {
+		from.g.for_each_nid([&](typename vamana<U>::nid_t nid) {
 			const auto& edges = from.g.get_edges(nid);
-			if (to.is_point_existed(nid)) {
+			if (to.is_node_existed(nid)) {
 				auto& new_edges = to.g.get_edges(nid);
 				auto edge_v = util::to<typename vamana<U>::seq_edge>(std::move(new_edges));
 				edge_v.insert(edge_v.end(), std::make_move_iterator(new_edges.begin()), 
@@ -515,14 +516,19 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 				to.insert(nid, coord, labels);
 				to.g.set_edges(nid, std::move(edges));
 			}
+		});
+		for (const auto& ep : from.entrance) {
+			to.entrance.push_back(ep);
 		}
+		std::sort(to.entrance.begin(), to.entrance.end());
+		to.entrance.erase(std::unique(to.entrance.begin(), to.entrance.end()), to.entrance.end());
 	};
 
 	for (const auto& [f, Pf] : P) {
 		vamana<U> base(dim, m, efc, alpha);
-		parlay::sequence<decltype(ps::value_type)> new_ps(Pf.size());
+		parlay::sequence<typename decltype(ps)::value_type> new_ps(Pf.size());
 		parlay::parallel_for(0, Pf.size(), [&](size_t i) {
-			new_ps[i] = ps[Pf[i]];
+			new_ps[i] = *(ps.begin() + Pf[i]);
 		});
 		for(size_t size_last=0, size_curr=size_init; size_curr<=size_max; size_last=size_curr, size_curr+=size_step)
 		{// TODO: reduce size_init & size_step

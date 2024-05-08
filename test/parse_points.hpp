@@ -313,7 +313,7 @@ inline auto load_point(const char *input_name, Conv converter, size_t max_num=0)
 }
 
 template <typename L>
-inline std::vector<std::vector<uint32_t>> load_label(const char* file_path, size_t max_size=0) {
+inline std::pair<std::vector<std::vector<uint32_t>>, std::unordered_map<L, std::vector<uint32_t>>> load_label(const char* file_path, size_t max_size=0) {
 	std::ifstream file(file_path);
 	if (!file) {
 		std::cerr << "Error: Unable to open file " << file_path << std::endl;
