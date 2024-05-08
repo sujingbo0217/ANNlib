@@ -56,6 +56,7 @@ public:
 	typedef uint32_t id_t;
 	typedef T elem_t;
 	typedef const elem_t* coord_t;
+	typedef uint32_t label_t;
 
 	point() :
 		id(~0u), coord(NULL), closure()
@@ -310,5 +311,41 @@ inline auto load_point(const char *input_name, Conv converter, size_t max_num=0)
 
 	throw std::invalid_argument("Unsupported input spec");
 }
+
+template <typename L>
+inline std::vector<std::vector<uint32_t>> load_label(const char* file_path, size_t max_size=0) {
+	std::ifstream file(file_path);
+	if (!file) {
+		std::cerr << "Error: Unable to open file " << file_path << std::endl;
+		return {};
+	}
+	std::string line;
+	std::getline(file, line);
+	std::istringstream num_points_iss(line);
+	size_t num_points;
+	num_points_iss >> num_points;
+	max_size = (max_size == 0 ? std::numeric_limits<decltype(max_size)>::max() : max_size);
+	max_size = std::min<size_t>(max_size, num_points);
+	std::vector<std::vector<L>> F;
+	std::unordered_map<L, std::vector<uint32_t>> P;
+	// F.resize(max_size);
+	size_t i = 0;
+	while (std::getline(file, line)) {
+		std::vector<L> node_labels;
+		std::istringstream node_iss(line);
+		L label;
+		char comma;
+		while (node_iss >> label) {
+			node_labels.push_back(label);
+			P[label].push_back(static_cast<uint32_t>(i));
+			node_iss >> comma;
+		}
+		F.push_back(node_labels);
+		++i;
+	}
+	file.close();
+	return std::make_pair(F, P);
+}
+
 
 #endif // __TEST_PARSE_POINTS__

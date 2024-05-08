@@ -331,6 +331,14 @@ public:
 			}
 		);
 	}
+	template<class F>
+	void for_each(F &&f){
+		cm::parallel_for(0, nodes.size(),
+			[&,it=nodes.begin()](size_t i){
+				f(nid_t(i));
+			}
+		);
+	}
 };
 
 template<
@@ -405,6 +413,12 @@ public:
 	void for_each(F &&f){
 		util::for_each(nodes, [&](auto &p){
 			f(gen_node_ptr(&p.second));
+		});
+	}
+	template<class F>
+	void for_each(F &&f){
+		util::for_each(nodes, [&](auto &p){
+			f(nid_t(i));
 		});
 	}
 };

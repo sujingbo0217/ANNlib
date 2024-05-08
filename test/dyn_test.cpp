@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include "parse_points.hpp"
 #include "graph/adj.hpp"
+#include "algo/algo.hpp"
 #include "algo/vamana.hpp"
 #include "util/intrin.hpp"
 #include "dist.hpp"
@@ -64,6 +65,7 @@ template<class DescLegacy>
 struct desc{
 	using point_t = point<typename DescLegacy::type_elem>;
 	using coord_t = typename point_t::coord_t;
+	using label_t = typename point_t::label_t;
 	using dist_t = float;
 	static dist_t distance(const coord_t &cu, const coord_t &cv, uint32_t dim){
 		return DescLegacy::distance(cu, cv, dim);
@@ -270,6 +272,59 @@ auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef)
 	return res;
 }
 
+template<class G, class Seq, typename L>
+auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef, const std::vector<std::vector<L>>& F)
+{
+	const size_t cnt_query = q.size();
+	per_visited.resize(cnt_query);
+	per_eval.resize(cnt_query);
+	per_size_C.resize(cnt_query);
+
+	using seq_result = parlay::sequence<typename G::result_t>;
+	parlay::sequence<seq_result> res(cnt_query);
+	auto search = [&]{
+		parlay::parallel_for(0, cnt_query, [&](size_t i){
+			ANN::algo::search_control ctrl{};
+			ctrl.log_per_stat = i;
+			// ctrl.beta = beta;
+			// res[i] = g.template search<seq_result>(q[i].get_coord(), k, ef, ctrl);
+			res[i] = g.template search<seq_result>(q[i].get_coord(), k, ef, F[i], ctrl);
+		});
+	};
+
+	puts("Warmup");
+	search();
+
+	parlay::internal::timer t;
+	const uint32_t rounds = 3;
+	for(uint32_t i=0; i<rounds; ++i)
+		search();
+	const double time_query = t.next_time()/rounds;
+	const double qps = cnt_query/time_query;
+	printf("Find neighbors: %.4f s, %e kqps\n", time_query, qps/1000);
+
+	printf("# visited: %lu\n", parlay::reduce(per_visited,parlay::addm<size_t>{}));
+	printf("# eval: %lu\n", parlay::reduce(per_eval,parlay::addm<size_t>{}));
+	printf("size of C: %lu\n", parlay::reduce(per_size_C,parlay::addm<size_t>{}));
+
+	parlay::sort_inplace(per_visited);
+	parlay::sort_inplace(per_eval);
+	parlay::sort_inplace(per_size_C);
+	const double tail_ratio[] = {0.9, 0.99, 0.999};
+	for(size_t i=0; i<sizeof(tail_ratio)/sizeof(*tail_ratio); ++i)
+	{
+		const auto r = tail_ratio[i];
+		const uint32_t tail_index = r*cnt_query;
+		printf("%.4f tail stat (at %u):\n", r, tail_index);
+
+		printf("\t# visited: %lu\n", per_visited[tail_index]);
+		printf("\t# eval: %lu\n", per_eval[tail_index]);
+		printf("\tsize of C: %lu\n", per_size_C[tail_index]);
+	}
+
+	return res;
+}
+
 template<class U, class Seq, class Point>
 auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k)
 {
@@ -278,6 +333,7 @@ auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k)
 	using pid_t = typename U::point_t::id_t;
 	std::priority_queue<std::pair<float, pid_t>> top_candidates;
 	float lower_bound = std::numeric_limits<float>::min();
+	
 	for(size_t i=0; i<data.size(); ++i)
 	{
 		const auto &u = data[i];
@@ -301,6 +357,43 @@ auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k)
 	return knn;
 }
 
+template<class U, class Seq, class Point, typename L>
+auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k, const std::vector<L>& base_label, const std::vector<L>& query_label)
+{
+	static_assert(std::is_same_v<Point, typename U::point_t>);
+
+	using pid_t = typename U::point_t::id_t;
+	std::priority_queue<std::pair<float, pid_t>> top_candidates;
+	const float lower_bound = std::numeric_limits<float>::min();
+	const float upper_bound = std::numeric_limits<float>::max();
+	
+	for(size_t i=0; i<data.size(); ++i)
+	{
+		const auto &u = data[i];	// point
+		std::vector<L> inter;
+		std::set_intersection(base_label.begin(), base_label.end(), query_label.begin(), query_label.end(), std::back_inserter(inter));
+		// float dist = U::distance(u.get_coord(), q.get_coord(), dim);
+		float dist = (inter.size() == 0 ? upper_bound : std::distance(u.get_coord(), q.get_coord(), dim));
+
+		// only keep the top k
+		if (top_candidates.size() < k || dist < lower_bound) {
+			top_candidates.emplace(dist, u.get_id());
+			if (top_candidates.size() > k) {
+				top_candidates.pop();
+			}
+			lower_bound = top_candidates.top().first;
+		}
+	}
+
+	parlay::sequence<pid_t> knn;
+	while (!top_candidates.empty()) {
+		knn.emplace_back(top_candidates.top().second);
+		top_candidates.pop();
+	}
+	std::reverse(knn.begin(), knn.end());
+	return knn;
+}
+
 template<class U, class S1, class S2>
 auto ConstructKnng(const S1 &data, const S2 &qs, uint32_t dim, uint32_t k)
 {
@@ -308,6 +401,17 @@ auto ConstructKnng(const S1 &data, const S2 &qs, uint32_t dim, uint32_t k)
 	parlay::sequence<parlay::sequence<pid_t>> res(qs.size());
 	parlay::parallel_for(0, qs.size(), [&](size_t i){
 		res[i] = CalculateOneKnn<U>(data, qs[i], dim, k);
+	});
+	return res;
+}
+
+template<class U, class S1, class S2, typename L>
+auto ConstructKnng(const S1 &data, const S2 &qs, uint32_t dim, uint32_t k, const std::vector<L>& base_label, const std::vector<std::vector<L>>& query_labels)
+{
+	using pid_t = typename U::point_t::id_t;
+	parlay::sequence<parlay::sequence<pid_t>> res(qs.size());
+	parlay::parallel_for(0, qs.size(), [&](size_t i){
+		res[i] = CalculateOneKnn<U, L>(data, qs[i], dim, k, base_label, query_labels[i]);
 	});
 	return res;
 }
@@ -354,8 +458,15 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	const char* file_query = parameter.getOptionValue("-q");
 	const uint32_t k = parameter.getOptionIntValue("-k", 10);
 	const uint32_t ef = parameter.getOptionIntValue("-ef", m*20);
+	const char* file_label_in = parameter.getOptionValue("-lb");
+	const char* file_label_query = parameter.getOptionValue("lq");
 	
 	parlay::internal::timer t("run_test:prepare", true);
+
+	using L = typename U::point_t::label_t;
+	auto [F_b, P] = load_label<L>(file_label_in, size_max);
+	t.next("Load base labels");
+	printf("Load %lu base points\n", F_b.size());
 
 	using T = typename U::point_t::elem_t;
 	auto [ps,dim] = load_point(file_in, to_point<T>, size_max);
@@ -368,47 +479,92 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 		printf("size_max is corrected to %lu\n", size_max);
 	}
 
+	auto [F_q, _] = load_label<L>(file_label_query);	// TODO: load_label
+	t.next("Load query labels");
+	printf("Load %lu query points\n", F_q.size());
+
 	auto [q,_] = load_point(file_query, to_point<T>);
 	t.next("Load queries");
 	printf("%s: [%lu,%u]\n", file_query, q.size(), _);
 
+	// parallel pre-fetch
 	visit_point(ps, size_max, dim);
 	visit_point(q, q.size(), dim);
 	t.next("Prefetch vectors");
 
-	vamana<U> g(dim, m, efc, alpha);
-	std::vector<vamana<U>> snapshots;
-	puts("Initialize vamana");
+	vamana<U> base(dim, m, efc, alpha);
+	// std::vector<vamana<U>> snapshots;
+	puts("Initialize base vamana");
 
-	for(size_t size_last=0, size_curr=size_init;
-		size_curr<=size_max;
-		size_last=size_curr, size_curr+=size_step)
-	{
-		printf("Increasing size from %lu to %lu\n", size_last, size_curr);
+	auto Merge = [&](const vamana<U>& from, vamana<U>& to) {
+		from.g.for_each([&](typename vamana<U>::nid_t nid)) {
+			const auto& edges = from.g.get_edges(nid);
+			if (to.is_point_existed(nid)) {
+				auto& new_edges = to.g.get_edges(nid);
+				auto edge_v = util::to<typename vamana<U>::seq_edge>(std::move(new_edges));
+				edge_v.insert(edge_v.end(), std::make_move_iterator(new_edges.begin()), 
+						std::make_move_iterator(new_edges.end()));
+				typename vamana<U>::seq_conn conn_v = algo::prune_simple(
+					to.g.conn_cast(std::move(edge_v)), to.g.get_deg_bound());
+				new_edges = to.g.edge_cast(conn_v);
+				to.g.set_edges(nid, std::move(new_edges));
+			} else {
+				const auto& node = from.g.get().get_node(nid);
+				const auto& labels = node->get_label();
+				const auto& coord = node->get_coord();
+				to.insert(nid, coord, labels);
+				to.g.set_edges(nid, std::move(edges));
+			}
+		}
+	};
 
-		puts("Insert points");
-		parlay::internal::timer t("run_test:insert", true);
-		auto ins_begin = ps.begin()+size_last;
-		auto ins_end = ps.begin()+size_curr;
-		g.insert(ins_begin, ins_end, batch_base);
-		t.next("Finish insertion");
+	for (const auto& [f, Pf] : P) {
+		vamana<U> base(dim, m, efc, alpha);
+		parlay::sequence<decltype(ps::value_type)> new_ps(Pf.size());
+		parlay::parallel_for(0, Pf.size(), [&](size_t i) {
+			new_ps[i] = ps[Pf[i]];
+		});
+		for(size_t size_last=0, size_curr=size_init; size_curr<=size_max; size_last=size_curr, size_curr+=size_step)
+		{// TODO: reduce size_init & size_step
+			printf("Increasing size from %lu to %lu\n", size_last, size_curr);
 
-		snapshots.push_back(g);
+			puts("Insert points");
+			parlay::internal::timer t("run_test:insert", true);
 
-		puts("Collect statistics");
-		// print_stat(g);
+			auto ins_begin = new_ps.begin() + size_last;
+			auto ins_end = new_ps.begin() + size_curr;
 
-		puts("Search for neighbors");
-		auto res = find_nbhs(g, q, k, ef);
+			// g.insert(ins_begin, ins_end, batch_base);
+			// g.insert(ins_begin, ins_end, batch_base, F_b);
 
-		puts("Generate groundtruth");
-		auto baseset = parlay::make_slice(ps.begin(), ins_end);
-		auto gt = ConstructKnng<U>(baseset, q, dim, k);
+			if (size_last == 0) {
+				base.insert(ins_begin, ins_end, batch_base, F_b);
+			} else {
+				vamana<U> g(dim, m, efc, alpha);
+				g.insert(ins_begin, ins_end, batch_base, F_b);
+				Merge(g, base);
+			}
+			t.next("Finish insertion");
 
-		puts("Compute recall");
-		calc_recall(q, res, gt, k);
+			// snapshots.push_back(g);
 
-		puts("---");
+			// puts("Collect statistics");
+			// print_stat(g);
+
+			puts("Search for neighbors");
+			auto res = find_nbhs(base, q, k, ef, F_q);
+
+			puts("Generate groundtruth");
+			auto baseset = parlay::make_slice(new_ps.begin(), ins_end);
+			std::vector label_slice(F_b.begin(), F_b.begin() + ins_end);
+
+			auto gt = ConstructKnng<U, typename vamana<U>::label_t>(baseset, q, dim, k, label_slice, F_q);
+
+			puts("Compute recall");
+			calc_recall(q, res, gt, k);
+
+			puts("---");
+		}
 	}
 
 	// print_stat_snapshots(snapshots);
@@ -443,14 +599,20 @@ int main(int argc, char **argv)
 	};
 
 	const char* type = parameter.getOptionValue("-type");
-	if(!strcmp(type,"uint8"))
-		run_test_helper(uint8_t{});
+
+	if(!strcmp(type,"float")) {
+		run_test_helper(float{});
+	}
+	// if(!strcmp(type,"uint8"))
+	// 	run_test_helper(uint8_t{});
 	/*
 	else if(!strcmp(type,"int8"))
 		run_test_helper(int8_t{});
 	else if(!strcmp(type,"float"))
 		run_test_helper(float{});
 	*/
-	else throw std::invalid_argument("Unsupported element type");
+	else {
+		throw std::invalid_argument("Unsupported element type");
+	}
 	return 0;
 }

@@ -23,9 +23,11 @@ ifeq (ON, $(HDF5))
 	CXXFLAGS_HDF5 = -DSUPPORT_HDF5 -lhdf5 -lhdf5_cpp
 endif
 
+label_generator: label_generator.cpp
+
 calc_recall: calc_recall.cpp
 
 dyn_test: dyn_test.cpp
 
-calc_recall dyn_test:
+label_generator calc_recall dyn_test:
 	$(CXX) $< $(CXXFLAGS_BASIC) $(CXXFLAGS_RELEASE) $(CXXFLAGS_HDF5) $(CXXFLAGS_JEMALLOC) -o $@

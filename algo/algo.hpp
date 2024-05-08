@@ -114,6 +114,93 @@ auto beamSearch(
 	return workset;
 }
 
+template<class L=lookup_custom_tag<>, class E, class D, class Seq, typename label_t>
+auto beamSearch(
+	E &&f_nbhs, D &&f_dist, std::vector<label_t> f_label, const Seq &eps, uint32_t ef, const std::vector<label_t>& F, const search_control &ctrl={})
+{
+	using cm = custom<typename L::type>;
+	using nid_t = typename Seq::value_type;
+	using conn = util::conn<nid_t>;
+
+	const auto nid_invalid = std::numeric_limits<nid_t>::max();
+	const uint32_t bits = ef>2? std::ceil(std::log2(ef))*2-2: 2;
+	const uint32_t mask = (1u<<bits)-1;
+	Seq visited(mask+1, nid_invalid);
+	uint32_t cnt_visited = 0;
+	typename cm::seq<conn> workset;
+	std::set<conn> cand; // TODO: test dual heaps
+	std::unordered_set<nid_t> is_inw; // TODO: test merge instead
+	// TODO: get statistics about the merged size
+	// TODO: switch to the alternative if exceeding a threshold
+	workset.reserve(ef+1);
+
+	for(nid_t pe : eps)
+	{
+		// P: base, F: query
+		std::vector<label_t> P = f_label(pe);
+		std::vector<label_t> inter;
+		std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
+		visited[cm::hash64(pe)&mask] = pe;
+		if (inter.size() > 0) {
+			const auto d = f_dist(pe);
+			cand.insert({d,pe});
+			workset.push_back({d,pe});
+			is_inw.insert(pe);
+		} else {
+			cand.insert({std::numeric_limits<float>::max(), pe});	// TODO: check
+			workset.push_back({std::numeric_limits<float>::max(), pe});
+		}
+	}
+	std::make_heap(workset.begin(), workset.end());
+
+	uint32_t cnt_eval = 0;
+	uint32_t limit_eval = ctrl.limit_eval.value_or(
+		std::numeric_limits<uint32_t>::max()
+	);
+	while(cand.size()>0)
+	{
+		if(cand.begin()->d>workset[0].d*ctrl.beta) break;
+
+		if(++cnt_eval>limit_eval) break;
+
+		nid_t u = cand.begin()->u;
+		cand.erase(cand.begin());
+
+		util::iter_each(f_nbhs(u), [&](nid_t pv){
+			const auto h_pv = cm::hash64(pv)&mask;
+			if(visited[h_pv]==pv) return;
+			visited[h_pv] = pv;
+			cnt_visited++;
+
+			const auto d = f_dist(pv);
+			if(!(workset.size()<ef||d<workset[0].d)) return;
+			if(!is_inw.insert(pv).second) return;
+
+			cand.insert({d,pv});
+			workset.push_back({d,pv});
+			std::push_heap(workset.begin(), workset.end());
+			if(workset.size()>ef)
+			{
+				std::pop_heap(workset.begin(), workset.end());
+				is_inw.erase(workset.back().u);
+				workset.pop_back();
+			}
+			if(cand.size()>ef)
+				cand.erase(std::prev(cand.end()));
+		});
+	}
+
+	if(ctrl.log_per_stat)
+	{
+		const auto qid = *ctrl.log_per_stat;
+		per_visited[qid] += cnt_visited;
+		per_eval[qid] += cand.size()+cnt_eval;
+		per_size_C[qid] += cnt_eval;
+	}
+
+	return workset;
+}
+
 namespace detail{
 
 template<class T>
