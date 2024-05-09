@@ -98,7 +98,7 @@ public:
 	void insert(Iter begin, Iter end, float batch_base=2);
 	
 	template<typename Iter>
-	void insert(Iter begin, Iter end, const std::vector<label_t>& F, float batch_base=2);
+	void insert(Iter begin, Iter end, const std::vector<std::vector<label_t>>& F, float batch_base=2);
 
 	void insert(const nid_t& nid, const coord_t& coord, const std::vector<label_t>& F);
 
@@ -112,7 +112,7 @@ public:
 		const coord_t &cq, uint32_t k, uint32_t ef, const std::vector<label_t>& F, const search_control &ctrl={}
 	) const;
 
-private:
+public:
 	static seq<edge>&& edge_cast(seq<conn> &&cs){
 		return reinterpret_cast<seq<edge>&&>(std::move(cs));
 	}
@@ -126,6 +126,7 @@ private:
 		return reinterpret_cast<const seq<conn>&>(es);
 	}
 
+private:
 	struct node_t{
 		coord_t coord;
 		std::vector<label_t> labels;
@@ -145,10 +146,10 @@ private:
 
 	public:
 	graph_t g;
+	seq<nid_t> entrance; // To init
+
 	private:
 	map::direct<pid_t,nid_t> id_map;
-
-	seq<nid_t> entrance; // To init
 	uint32_t dim;
 	uint32_t R;
 	uint32_t L;
@@ -159,12 +160,14 @@ private:
 	template<typename Iter>
 	void insert_batch_impl(Iter begin, Iter end);
 	template<typename Iter>
-	void insert_batch_impl(Iter begin, Iter end, const std::vector<label_t>& F);
+	void insert_batch_impl(Iter begin, Iter end, const std::vector<std::vector<label_t>>& F);
 
+public:
 	uint32_t get_deg_bound() const{
 		return R;
 	}
 
+private:
 	auto gen_f_dist(const coord_t &c) const{
 
 		class dist_evaluator{
@@ -215,8 +218,11 @@ private:
 		};
 	}
 
-	auto get_f_label(nid_t u) const {
-		return g.get().get_node(u)->get_label();
+	template<class G>
+	auto get_f_label(const G& g) const {
+		return [&](nid_t u) -> decltype(auto) {
+			return g.get_node(u)->get_label();
+		};
 	}
 
 	template<class Op>
@@ -332,7 +338,7 @@ void vamana<Desc>::insert(Iter begin, Iter end, float batch_base)
 
 template<class Desc>
 template<typename Iter>
-void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<label_t>& F, float batch_base)
+void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<label_t>>& F, float batch_base)
 {
 	static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
 	static_assert(std::is_base_of_v<
@@ -347,6 +353,9 @@ void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<label_t>& F, f
 	auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto){
 		return *(begin+perm[i]);
 	});
+	auto rand_label_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto){
+		return *(F.begin()+perm[i]);
+	});
 
 	for (auto it = begin; it != end; it++) {
 		set_point(it->get_id());
@@ -356,7 +365,7 @@ void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<label_t>& F, f
 	if(g.empty())
 	{
 		const nid_t ep_init = id_map.insert(rand_seq.begin()->get_id());
-		g.add_node(ep_init, node_t{ rand_seq.begin()->get_coord(), F });
+		g.add_node(ep_init, node_t{ rand_seq.begin()->get_coord(), *(F.begin()) });
 		entrance.push_back(ep_init);
 		cnt_skip = 1;
 	}
@@ -497,7 +506,7 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end)
 
 template<class Desc>
 template<typename Iter>
-void vamana<Desc>::insert_batch_impl(Iter begin, Iter end, const std::vector<label_t>& F)
+void vamana<Desc>::insert_batch_impl(Iter begin, Iter end, const std::vector<std::vector<label_t>>& F)
 {
 	const size_t size_batch = std::distance(begin,end);
 	seq<nid_t> nids(size_batch);
@@ -519,7 +528,10 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end, const std::vector<lab
 
 	g.add_nodes(util::delayed_seq(size_batch, [&](size_t i){
 		// GUARANTEE: begin[*].get_coord is only invoked for assignment once
-		return std::pair{nids[i], node_t{(begin+i)->get_coord()}};
+		return std::pair{nids[i], node_t{
+			(begin + i)->get_coord(), 
+			*(F.begin() + i)
+		}};
 	}));
 
 	// below we (re)generate edges incident to nodes in the current batch
@@ -532,7 +544,7 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end, const std::vector<lab
 		auto &eps_u = entrance;
 		search_control sctrl; // TODO: use designated initializers in C++20
 		sctrl.log_per_stat = i;
-		seq<conn> res = algo::beamSearch(gen_f_nbhs(g), gen_f_dist(u), get_f_label(u), eps_u, L, F, sctrl);
+		seq<conn> res = algo::beamSearch(gen_f_nbhs(g), gen_f_dist(u), get_f_label(g), eps_u, L, F[i], sctrl);
 
 		prune_control pctrl; // TODO: use designated intializers in C++20
 		pctrl.alpha = alpha;
@@ -621,7 +633,7 @@ Seq vamana<Desc>::search(
 {
 	seq<nid_t> eps = entrance;
 	// auto nbhs = beamSearch(gen_f_nbhs(g), gen_f_dist(cq), eps, ef, ctrl);
-	auto nbhs = beamSearch(gen_f_nbhs(g), gen_f_dist(cq), get_f_label(cq), eps, ef, F, ctrl);
+	auto nbhs = beamSearch(gen_f_nbhs(g), gen_f_dist(cq), get_f_label(g), eps, ef, F, ctrl);
 
 	nbhs = algo::prune_simple(std::move(nbhs), k/*, ctrl*/); // TODO: set ctrl
 	cm::sort(nbhs.begin(), nbhs.end());

@@ -359,22 +359,23 @@ auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k)
 }
 
 template<class U, class Seq, class Point, typename L>
-auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k, const std::vector<L>& base_label, const std::vector<L>& query_label)
+auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k, const std::vector<std::vector<L>>& base_labels, const std::vector<L>& query_label)
 {
 	static_assert(std::is_same_v<Point, typename U::point_t>);
+	assert(data.size() == base_labels.size());
 
 	using pid_t = typename U::point_t::id_t;
 	std::priority_queue<std::pair<float, pid_t>> top_candidates;
-	const float lower_bound = std::numeric_limits<float>::min();
-	const float upper_bound = std::numeric_limits<float>::max();
+	float lower_bound = std::numeric_limits<float>::min();
+	float upper_bound = std::numeric_limits<float>::max();
 	
 	for(size_t i=0; i<data.size(); ++i)
 	{
 		const auto &u = data[i];	// point
 		std::vector<L> inter;
-		std::set_intersection(base_label.begin(), base_label.end(), query_label.begin(), query_label.end(), std::back_inserter(inter));
+		std::set_intersection(base_labels[i].begin(), base_labels[i].end(), query_label.begin(), query_label.end(), std::back_inserter(inter));
 		// float dist = U::distance(u.get_coord(), q.get_coord(), dim);
-		float dist = (inter.size() == 0 ? upper_bound : std::distance(u.get_coord(), q.get_coord(), dim));
+		float dist = (inter.size() == 0 ? upper_bound : U::distance(u.get_coord(), q.get_coord(), dim));
 
 		// only keep the top k
 		if (top_candidates.size() < k || dist < lower_bound) {
@@ -407,12 +408,12 @@ auto ConstructKnng(const S1 &data, const S2 &qs, uint32_t dim, uint32_t k)
 }
 
 template<class U, class S1, class S2, typename L>
-auto ConstructKnng(const S1 &data, const S2 &qs, uint32_t dim, uint32_t k, const std::vector<L>& base_label, const std::vector<std::vector<L>>& query_labels)
+auto ConstructKnng(const S1 &data, const S2 &qs, uint32_t dim, uint32_t k, const std::vector<std::vector<L>>& base_labels, const std::vector<std::vector<L>>& query_labels)
 {
 	using pid_t = typename U::point_t::id_t;
 	parlay::sequence<parlay::sequence<pid_t>> res(qs.size());
 	parlay::parallel_for(0, qs.size(), [&](size_t i){
-		res[i] = CalculateOneKnn<U, L>(data, qs[i], dim, k, base_label, query_labels[i]);
+		res[i] = CalculateOneKnn<U>(data, qs[i], dim, k, base_labels, query_labels[i]);
 	});
 	return res;
 }
@@ -497,20 +498,20 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	// std::vector<vamana<U>> snapshots;
 	puts("Initialize base vamana");
 
-	auto Merge = [&](const vamana<U>& from, vamana<U>& to) {
+	auto Merge = [&](vamana<U> from, vamana<U>& to) {
 		from.g.for_each_nid([&](typename vamana<U>::nid_t nid) {
 			const auto& edges = from.g.get_edges(nid);
 			if (to.is_node_existed(nid)) {
-				auto& new_edges = to.g.get_edges(nid);
-				auto edge_v = util::to<typename vamana<U>::seq_edge>(std::move(new_edges));
+				auto new_edges = to.g.get_edges(nid);
+				auto edge_v = ANN::util::to<typename vamana<U>::seq_edge>(std::move(new_edges));
 				edge_v.insert(edge_v.end(), std::make_move_iterator(new_edges.begin()), 
 						std::make_move_iterator(new_edges.end()));
-				typename vamana<U>::seq_conn conn_v = algo::prune_simple(
-					to.g.conn_cast(std::move(edge_v)), to.g.get_deg_bound());
-				new_edges = to.g.edge_cast(conn_v);
+				typename vamana<U>::seq_conn conn_v = ANN::algo::prune_simple(
+					to.conn_cast(std::move(edge_v)), to.get_deg_bound());
+				new_edges = to.edge_cast(std::move(conn_v));
 				to.g.set_edges(nid, std::move(new_edges));
 			} else {
-				const auto& node = from.g.get().get_node(nid);
+				const auto& node = from.g.get_node(nid);
 				const auto& labels = node->get_label();
 				const auto& coord = node->get_coord();
 				to.insert(nid, coord, labels);
@@ -524,12 +525,15 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 		to.entrance.erase(std::unique(to.entrance.begin(), to.entrance.end()), to.entrance.end());
 	};
 
+	// bool is_first_insert = true;
 	for (const auto& [f, Pf] : P) {
-		vamana<U> base(dim, m, efc, alpha);
 		parlay::sequence<typename decltype(ps)::value_type> new_ps(Pf.size());
 		parlay::parallel_for(0, Pf.size(), [&](size_t i) {
 			new_ps[i] = *(ps.begin() + Pf[i]);
 		});
+		// auto new_ps = parlay::delayed_seq<T>(Pf.size(), [&](size_t i) {
+  	//   return ps[Pf[i]];
+		// });
 		for(size_t size_last=0, size_curr=size_init; size_curr<=size_max; size_last=size_curr, size_curr+=size_step)
 		{// TODO: reduce size_init & size_step
 			printf("Increasing size from %lu to %lu\n", size_last, size_curr);
@@ -539,15 +543,18 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 
 			auto ins_begin = new_ps.begin() + size_last;
 			auto ins_end = new_ps.begin() + size_curr;
+			// auto ins_begin = new_ps.begin();
+			// auto ins_end = new_ps.end();
 
 			// g.insert(ins_begin, ins_end, batch_base);
-			// g.insert(ins_begin, ins_end, batch_base, F_b);
+			// g.insert(ins_begin, ins_end, F_b, batch_base);
 
 			if (size_last == 0) {
-				base.insert(ins_begin, ins_end, batch_base, F_b);
+				base.insert(ins_begin, ins_end, F_b, batch_base);
+				// is_first_insert = false;
 			} else {
 				vamana<U> g(dim, m, efc, alpha);
-				g.insert(ins_begin, ins_end, batch_base, F_b);
+				g.insert(ins_begin, ins_end, F_b, batch_base);
 				Merge(g, base);
 			}
 			t.next("Finish insertion");
@@ -561,10 +568,12 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 			auto res = find_nbhs(base, q, k, ef, F_q);
 
 			puts("Generate groundtruth");
+			// auto baseset = parlay::make_slice(ps.begin(), ins_end);
+			// auto gt = ConstructKnng<U>(baseset, q, dim, k);
+			
 			auto baseset = parlay::make_slice(new_ps.begin(), ins_end);
-			std::vector label_slice(F_b.begin(), F_b.begin() + ins_end);
-
-			auto gt = ConstructKnng<U, typename vamana<U>::label_t>(baseset, q, dim, k, label_slice, F_q);
+			std::vector label_slice(F_b.begin(), F_b.begin() + size_curr);
+			auto gt = ConstructKnng<U>(baseset, q, dim, k, label_slice, F_q);
 
 			puts("Compute recall");
 			calc_recall(q, res, gt, k);

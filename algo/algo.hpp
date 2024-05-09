@@ -114,9 +114,9 @@ auto beamSearch(
 	return workset;
 }
 
-template<class L=lookup_custom_tag<>, class E, class D, class Seq, typename label_t>
+template<class L=lookup_custom_tag<>, class E, class D, class G, class Seq, typename label_t>
 auto beamSearch(
-	E &&f_nbhs, D &&f_dist, std::vector<label_t> f_label, const Seq &eps, uint32_t ef, const std::vector<label_t>& F, const search_control &ctrl={})
+	E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef, const std::vector<label_t>& F, const search_control &ctrl={})
 {
 	using cm = custom<typename L::type>;
 	using nid_t = typename Seq::value_type;

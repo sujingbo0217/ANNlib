@@ -1,5 +1,19 @@
 {
   "files.associations": {
+    "*.COBOL*": "cobol",
+    "*.COB*": "cobol",
+    "*.COBCOPY*": "cobol",
+    "*.COPYBOOK*": "cobol",
+    "*.COPY*": "cobol",
+    "*.PL1*": "pl1",
+    "*.PLI*": "pl1",
+    "*.INC*": "pl1",
+    "*.INCLUDE*": "pl1",
+    "*.JCL*": "jcl",
+    "*.ASM*": "hlasm",
+    "*.ASSEMBLE*": "hlasm",
+    "*.HLASM*": "hlasm",
+    "*.HLA*": "hlasm",
     "*.tcc": "cpp",
     "deque": "cpp",
     "list": "cpp",
@@ -65,6 +79,7 @@
     "stop_token": "cpp",
     "thread": "cpp",
     "typeinfo": "cpp",
-    "variant": "cpp"
+    "variant": "cpp",
+    "charconv": "cpp"
   }
 }
