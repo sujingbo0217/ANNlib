@@ -461,14 +461,14 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	const uint32_t k = parameter.getOptionIntValue("-k", 10);
 	const uint32_t ef = parameter.getOptionIntValue("-ef", m*20);
 	const char* file_label_in = parameter.getOptionValue("-lb");
-	const char* file_label_query = parameter.getOptionValue("lq");
+	const char* file_label_query = parameter.getOptionValue("-lq");
 	
 	parlay::internal::timer t("run_test:prepare", true);
 
 	using L = typename U::point_t::label_t;
 	auto [F_b, P] = load_label<L>(file_label_in, size_max);
 	t.next("Load base labels");
-	printf("Load %lu base points\n", F_b.size());
+	printf("Load %lu base points w/ labels\n", F_b.size());
 
 	using T = typename U::point_t::elem_t;
 	auto [ps,dim] = load_point(file_in, to_point<T>, size_max);
@@ -483,7 +483,7 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 
 	auto [F_q, _pq] = load_label<L>(file_label_query);
 	t.next("Load query labels");
-	printf("Load %lu query points\n", F_q.size());
+	printf("Load %lu query points w/ labels\n", F_q.size());
 
 	auto [q,_] = load_point(file_query, to_point<T>);
 	t.next("Load queries");
@@ -500,7 +500,6 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 
 	auto Merge = [&](vamana<U> from, vamana<U>& to) {
 		from.g.for_each_nid([&](typename vamana<U>::nid_t nid) {
-			const auto& edges = from.g.get_edges(nid);
 			if (to.is_node_existed(nid)) {
 				auto new_edges = to.g.get_edges(nid);
 				auto edge_v = ANN::util::to<typename vamana<U>::seq_edge>(std::move(new_edges));
@@ -515,6 +514,7 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 				const auto& labels = node->get_label();
 				const auto& coord = node->get_coord();
 				to.insert(nid, coord, labels);
+				auto edges = from.g.get_edges(nid);
 				to.g.set_edges(nid, std::move(edges));
 			}
 		});

@@ -324,8 +324,9 @@ inline std::pair<std::vector<std::vector<uint32_t>>, std::unordered_map<L, std::
 	std::istringstream num_points_iss(line);
 	size_t num_points;
 	num_points_iss >> num_points;
-	max_size = (max_size == 0 ? std::numeric_limits<decltype(max_size)>::max() : max_size);
-	max_size = std::min<size_t>(max_size, num_points);
+	max_size = (max_size == 0 ? num_points : max_size);
+	// max_size = std::min<size_t>(max_size, num_points);
+	std::cerr << num_points << " " << max_size << '\n';
 	std::vector<std::vector<L>> F;
 	std::unordered_map<L, std::vector<uint32_t>> P;
 	// F.resize(max_size);
