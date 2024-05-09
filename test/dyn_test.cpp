@@ -74,6 +74,7 @@ struct desc{
 
 	template<typename Nid, class Ext, class Edge>
 	using graph_t = ANN::graph::adj_seq<Nid,Ext,Edge>;
+	// using graph_t = ANN::graph::adj_map<Nid,Ext,Edge>;
 
 	template<typename Nid, class Ext, class Edge>
 	using graph_aux = ANN::graph::adj_map<Nid,Ext,Edge>;
@@ -105,10 +106,10 @@ void visit_point(const T &array, size_t dim0, size_t dim1)
 template<class G>
 void print_stat(const G &g)
 {
-	puts("#vertices         edges  avg. deg");
+	puts("#vertices         edges    avg. deg");
 	size_t cnt_vertex = g.num_nodes();
 	size_t cnt_degree = g.num_edges();
-	printf("%14lu %16lu %10.2f\n", 
+	printf("%4lu %16lu %10.2f\n", 
 		cnt_vertex, cnt_degree, float(cnt_degree)/cnt_vertex
 	);
 }
@@ -371,15 +372,15 @@ auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k, 
 	
 	for(size_t i=0; i<data.size(); ++i)
 	{
-		const auto &u = data[i];	// point
+		const auto &u = data[i];	// id, point
 		std::vector<L> inter;
 		std::set_intersection(base_labels[i].begin(), base_labels[i].end(), query_label.begin(), query_label.end(), std::back_inserter(inter));
 		// float dist = U::distance(u.get_coord(), q.get_coord(), dim);
-		float dist = (inter.size() == 0 ? upper_bound : U::distance(u.get_coord(), q.get_coord(), dim));
+		float dist = (inter.size() == 0 ? upper_bound : U::distance(u.second.get_coord(), q.get_coord(), dim));
 
 		// only keep the top k
 		if (top_candidates.size() < k || dist < lower_bound) {
-			top_candidates.emplace(dist, u.get_id());
+			top_candidates.emplace(dist, u.second.get_id());
 			if (top_candidates.size() > k) {
 				top_candidates.pop();
 			}
@@ -498,13 +499,16 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	// std::vector<vamana<U>> snapshots;
 	puts("Initialize base vamana");
 
-	auto Merge = [&](vamana<U> from, vamana<U>& to) {
-		from.g.for_each_nid([&](typename vamana<U>::nid_t nid) {
+	auto Merge = [](vamana<U> from, vamana<U>& to) {
+		// from.g.iter_each_nid([&](typename vamana<U>::nid_t nid) {
+		for (typename vamana<U>::nid_t nid : from.existed_points) {
+			std::cerr << "nid: " << nid << '\n';
 			if (to.is_node_existed(nid)) {
 				auto new_edges = to.g.get_edges(nid);
 				auto edge_v = ANN::util::to<typename vamana<U>::seq_edge>(std::move(new_edges));
 				edge_v.insert(edge_v.end(), std::make_move_iterator(new_edges.begin()), 
 						std::make_move_iterator(new_edges.end()));
+				// edge_v.insert(edge_v.end(), new_edges.begin(), new_edges.end());
 				typename vamana<U>::seq_conn conn_v = ANN::algo::prune_simple(
 					to.conn_cast(std::move(edge_v)), to.get_deg_bound());
 				new_edges = to.edge_cast(std::move(conn_v));
@@ -517,7 +521,8 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 				auto edges = from.g.get_edges(nid);
 				to.g.set_edges(nid, std::move(edges));
 			}
-		});
+		}
+		// });
 		for (const auto& ep : from.entrance) {
 			to.entrance.push_back(ep);
 		}
@@ -527,42 +532,53 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 
 	// bool is_first_insert = true;
 	for (const auto& [f, Pf] : P) {
-		parlay::sequence<typename decltype(ps)::value_type> new_ps(Pf.size());
+		std::cerr << f << " " << Pf.size() << '\n';
+		// parlay::sequence<typename decltype(ps)::value_type> new_ps(Pf.size());
+		parlay::sequence<std::pair<L, typename decltype(ps)::value_type>> new_ps(Pf.size());
+		std::vector<std::vector<L>> base_labels(Pf.size());
+
 		parlay::parallel_for(0, Pf.size(), [&](size_t i) {
-			new_ps[i] = *(ps.begin() + Pf[i]);
+			// new_ps[i] = *(ps.begin() + Pf[i]);
+			new_ps[i] = std::make_pair(Pf[i], *(ps.begin() + Pf[i]));
+			base_labels[i] = F_b[Pf[i]];
 		});
-		// auto new_ps = parlay::delayed_seq<T>(Pf.size(), [&](size_t i) {
-  	//   return ps[Pf[i]];
-		// });
-		for(size_t size_last=0, size_curr=size_init; size_curr<=size_max; size_last=size_curr, size_curr+=size_step)
-		{// TODO: reduce size_init & size_step
-			printf("Increasing size from %lu to %lu\n", size_last, size_curr);
+
+		std::cerr << new_ps.size() << " " << base_labels.size() << '\n';
+
+		// for(size_t size_last=0, size_curr=size_init; size_curr<=std::min<size_t>(size_max, new_ps.size()); size_last=size_curr, size_curr+=size_step)
+		// {
+			// printf("Increasing size from %lu to %lu\n", size_last, size_curr);
 
 			puts("Insert points");
 			parlay::internal::timer t("run_test:insert", true);
 
-			auto ins_begin = new_ps.begin() + size_last;
-			auto ins_end = new_ps.begin() + size_curr;
-			// auto ins_begin = new_ps.begin();
-			// auto ins_end = new_ps.end();
+			// auto ins_begin = new_ps.begin() + size_last;
+			// auto ins_end = new_ps.begin() + size_curr;
+			auto ins_begin = new_ps.begin();
+			auto ins_end = new_ps.end();
 
 			// g.insert(ins_begin, ins_end, batch_base);
 			// g.insert(ins_begin, ins_end, F_b, batch_base);
 
-			if (size_last == 0) {
-				base.insert(ins_begin, ins_end, F_b, batch_base);
-				// is_first_insert = false;
-			} else {
-				vamana<U> g(dim, m, efc, alpha);
-				g.insert(ins_begin, ins_end, F_b, batch_base);
-				Merge(g, base);
-			}
+			// if (size_last == 0) {
+			// 	base.insert(ins_begin, ins_end, F_b, batch_base);
+			// 	// is_first_insert = false;
+			// } else {
+			// 	vamana<U> g(dim, m, efc, alpha);
+			// 	g.insert(ins_begin, ins_end, F_b, batch_base);
+			// 	Merge(g, base);
+			// 	// base.insert(ins_begin, ins_end, F_b, batch_base);
+			// }
+
+			vamana<U> g(dim, m, efc, alpha);
+			g.insert(ins_begin, ins_end, base_labels, batch_base);
+			Merge(g, base);
 			t.next("Finish insertion");
 
 			// snapshots.push_back(g);
 
 			// puts("Collect statistics");
-			// print_stat(g);
+			print_stat(base);
 
 			puts("Search for neighbors");
 			auto res = find_nbhs(base, q, k, ef, F_q);
@@ -571,15 +587,17 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 			// auto baseset = parlay::make_slice(ps.begin(), ins_end);
 			// auto gt = ConstructKnng<U>(baseset, q, dim, k);
 			
-			auto baseset = parlay::make_slice(new_ps.begin(), ins_end);
-			std::vector label_slice(F_b.begin(), F_b.begin() + size_curr);
-			auto gt = ConstructKnng<U>(baseset, q, dim, k, label_slice, F_q);
+			// auto baseset = parlay::make_slice(new_ps.begin(), ins_end);
+			// std::vector label_slice(F_b.begin(), F_b.begin() + size_curr);
+			// auto gt = ConstructKnng<U>(baseset, q, dim, k, label_slice, F_q);
+
+			auto gt = ConstructKnng<U>(new_ps, q, dim, k, base_labels, F_q);
 
 			puts("Compute recall");
 			calc_recall(q, res, gt, k);
 
 			puts("---");
-		}
+		// }
 	}
 
 	// print_stat_snapshots(snapshots);

@@ -147,6 +147,7 @@ private:
 	public:
 	graph_t g;
 	seq<nid_t> entrance; // To init
+	std::unordered_set<nid_t> existed_points;
 
 	private:
 	map::direct<pid_t,nid_t> id_map;
@@ -154,8 +155,6 @@ private:
 	uint32_t R;
 	uint32_t L;
 	float alpha;
-
-	std::unordered_set<nid_t> existed_points;
 
 	template<typename Iter>
 	void insert_batch_impl(Iter begin, Iter end);
@@ -237,7 +236,9 @@ private:
 
 public:
 	size_t num_nodes() const{
-		return g.num_nodes();
+		// return g.num_nodes();
+		std::cerr << "total points: " << existed_points.size() << '\n';
+		return existed_points.size();
 	}
 
 	size_t num_edges(nid_t u) const{
@@ -340,13 +341,15 @@ template<class Desc>
 template<typename Iter>
 void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<label_t>>& F, float batch_base)
 {
-	static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
+	// static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
 	static_assert(std::is_base_of_v<
 		std::random_access_iterator_tag, typename std::iterator_traits<Iter>::iterator_category
 	>);
 
 	const size_t n = std::distance(begin, end);
 	if(n==0) return;
+
+	std::cerr << "n: " << n << '\n';
 
 	// std::random_device rd;
 	auto perm = cm::random_permutation(n/*, rd()*/);
@@ -358,14 +361,18 @@ void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<la
 	});
 
 	for (auto it = begin; it != end; it++) {
-		set_point(it->get_id());
+		set_point(it->first);
 	}
+	
+	std::cerr << "total nodes now: " << existed_points.size() << '\n';
 
 	size_t cnt_skip = 0;
 	if(g.empty())
 	{
-		const nid_t ep_init = id_map.insert(rand_seq.begin()->get_id());
-		g.add_node(ep_init, node_t{ rand_seq.begin()->get_coord(), *(F.begin()) });
+		// const nid_t ep_init = id_map.insert(rand_seq.begin()->get_id());
+		auto it = rand_seq.begin();
+		const nid_t ep_init = id_map.insert(static_cast<pid_t>(it->first));
+		g.add_node(ep_init, node_t{ it->second.get_coord(), *(F.begin()) });
 		entrance.push_back(ep_init);
 		cnt_skip = 1;
 	}
@@ -376,6 +383,8 @@ void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<la
 	{
 		batch_begin = batch_end;
 		batch_end = std::min({n, (size_t)std::ceil(batch_begin*batch_base)+1, batch_begin+size_limit});
+
+		std::cerr << "(batch_begin, batch_end)" << batch_begin << " " << batch_end << '\n';
 
 		util::debug_output("Batch insertion: [%u, %u)\n", batch_begin, batch_end);
 		// insert_batch_impl(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end);
@@ -519,17 +528,19 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end, const std::vector<std
 	// `nids[i]` is the nid of the node corresponding to the i-th 
 	// point to insert in the batch, associated with level[i]
 	id_map.insert(util::delayed_seq(size_batch, [&](size_t i){
-		return (begin+i)->get_id();
+		// return (begin+i)->get_id();
+		return (begin+i)->first;
 	}));
 
 	cm::parallel_for(0, size_batch, [&](uint32_t i){
-		nids[i] = id_map.get_nid((begin+i)->get_id());
+		// nids[i] = id_map.get_nid((begin+i)->get_id());
+		nids[i] = id_map.get_nid((begin+i)->first);
 	});
 
 	g.add_nodes(util::delayed_seq(size_batch, [&](size_t i){
 		// GUARANTEE: begin[*].get_coord is only invoked for assignment once
 		return std::pair{nids[i], node_t{
-			(begin + i)->get_coord(), 
+			(begin + i)->second.get_coord(), 
 			*(F.begin() + i)
 		}};
 	}));

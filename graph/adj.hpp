@@ -314,6 +314,12 @@ public:
 		for(auto &u : nodes)
 			f(gen_node_ptr(&u));
 	}
+	template<class F>
+	void iter_each_nid(F &&f){
+		for(size_t i = 0; i < nodes.size(); ++i) {
+			f(nid_t(i));
+		}
+	}
 	// TODO: eliminate redundant code by deducing 'this' in C++23
 	template<class F>
 	void for_each(F &&f) const{
@@ -401,6 +407,12 @@ public:
 	void iter_each(F &&f){
 		util::iter_each(nodes, [&](auto &p){
 			f(gen_node_ptr(&p.second));
+		});
+	}
+	template<class F>
+	void iter_each_nid(F &&f){
+		util::iter_each(nodes, [&](size_t i) {
+			f(nid_t(i));
 		});
 	}
 	template<class F>
