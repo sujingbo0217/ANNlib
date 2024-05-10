@@ -330,6 +330,7 @@ inline std::pair<std::vector<std::vector<uint32_t>>, std::unordered_map<L, std::
 	std::unordered_map<L, std::vector<uint32_t>> P;
 	// F.resize(max_size);
 	size_t i = 0;
+	size_t total_labels = 0;
 	while (std::getline(file, line)) {
 		std::vector<L> node_labels;
 		std::istringstream node_iss(line);
@@ -341,8 +342,10 @@ inline std::pair<std::vector<std::vector<uint32_t>>, std::unordered_map<L, std::
 			node_iss >> comma;
 		}
 		F.push_back(node_labels);
+		total_labels += node_labels.size();
 		++i;
 	}
+	std::cout << std::fixed << std::setprecision(2) << "Filters per Point: " << (float)total_labels / (float)num_points << std::endl;
 	file.close();
 	return std::make_pair(F, P);
 }

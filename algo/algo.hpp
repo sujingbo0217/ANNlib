@@ -140,15 +140,12 @@ auto beamSearch(
 		std::vector<label_t> P = f_label(pe);
 		std::vector<label_t> inter;
 		std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
-		visited[cm::hash64(pe)&mask] = pe;
 		if (inter.size() > 0) {
+			visited[cm::hash64(pe)&mask] = pe;
 			const auto d = f_dist(pe);
 			cand.insert({d,pe});
 			workset.push_back({d,pe});
 			is_inw.insert(pe);
-		} else {
-			cand.insert({std::numeric_limits<float>::max(), pe});	// TODO: check
-			workset.push_back({std::numeric_limits<float>::max(), pe});
 		}
 	}
 	std::make_heap(workset.begin(), workset.end());
@@ -176,17 +173,23 @@ auto beamSearch(
 			if(!(workset.size()<ef||d<workset[0].d)) return;
 			if(!is_inw.insert(pv).second) return;
 
-			cand.insert({d,pv});
-			workset.push_back({d,pv});
-			std::push_heap(workset.begin(), workset.end());
-			if(workset.size()>ef)
-			{
-				std::pop_heap(workset.begin(), workset.end());
-				is_inw.erase(workset.back().u);
-				workset.pop_back();
+			std::vector<label_t> P = f_label(pv);
+			std::vector<label_t> inter;
+			std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
+			if (inter.size() != 0) {
+				cand.insert({d,pv});
+				workset.push_back({d,pv});
+				std::push_heap(workset.begin(), workset.end());
+				if(workset.size()>ef)
+				{
+					std::pop_heap(workset.begin(), workset.end());
+					is_inw.erase(workset.back().u);
+					workset.pop_back();
+				}
+				if(cand.size()>ef) {
+					cand.erase(std::prev(cand.end()));
+				}
 			}
-			if(cand.size()>ef)
-				cand.erase(std::prev(cand.end()));
 		});
 	}
 

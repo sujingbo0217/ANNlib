@@ -382,6 +382,7 @@ public:
 	void add_nodes(Iter begin, Iter end){
 		// TODO: forward to `add_nodes(Seq&&)` using `subrange` in C++20
 		nodes.insert(begin, end);
+		// std::cerr << "nodes size: " << nodes.size() << '\n';
 	}
 	template<class Seq>
 	void add_nodes(Seq&& ns){
@@ -411,9 +412,9 @@ public:
 	}
 	template<class F>
 	void iter_each_nid(F &&f){
-		util::iter_each(nodes, [&](size_t i) {
-			f(nid_t(i));
-		});
+		for(auto [k, v] : nodes) {
+			f(nid_t(k));
+		}
 	}
 	template<class F>
 	void for_each(F &&f) const{

@@ -236,9 +236,9 @@ private:
 
 public:
 	size_t num_nodes() const{
-		// return g.num_nodes();
-		std::cerr << "total points: " << existed_points.size() << '\n';
-		return existed_points.size();
+		return g.num_nodes();
+		// std::cerr << "total points: " << existed_points.size() << '\n';
+		// return existed_points.size();
 	}
 
 	size_t num_edges(nid_t u) const{
@@ -349,8 +349,6 @@ void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<la
 	const size_t n = std::distance(begin, end);
 	if(n==0) return;
 
-	std::cerr << "n: " << n << '\n';
-
 	// std::random_device rd;
 	auto perm = cm::random_permutation(n/*, rd()*/);
 	auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto){
@@ -364,7 +362,7 @@ void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<la
 		set_point(it->first);
 	}
 	
-	std::cerr << "total nodes now: " << existed_points.size() << '\n';
+	// std::cerr << "total nodes now: " << existed_points.size() << '\n';
 
 	size_t cnt_skip = 0;
 	if(g.empty())
@@ -384,7 +382,7 @@ void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<la
 		batch_begin = batch_end;
 		batch_end = std::min({n, (size_t)std::ceil(batch_begin*batch_base)+1, batch_begin+size_limit});
 
-		std::cerr << "(batch_begin, batch_end)" << batch_begin << " " << batch_end << '\n';
+		// std::cerr << "(batch_begin, batch_end)" << batch_begin << " " << batch_end << '\n';
 
 		util::debug_output("Batch insertion: [%u, %u)\n", batch_begin, batch_end);
 		// insert_batch_impl(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end);
@@ -492,6 +490,7 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end)
 		auto &nbh_v_add = edge_added_grouped[j].second;
 
 		auto edge_agent_v = g.get_edges(v);
+		// std::cerr << "Before: " << edge_agent_v.size() << '\n';
 		auto edge_v = util::to<seq<edge>>(std::move(edge_agent_v));
 		edge_v.insert(edge_v.end(),
 			std::make_move_iterator(nbh_v_add.begin()),
@@ -504,6 +503,8 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end)
 		);
 		edge_agent_v = edge_cast(conn_v);
 		nbh_backward[j] = {v, std::move(edge_agent_v)};
+		// auto es = g.get_edges(v);
+		// std::cerr << "After: " << es.size() << '\n';
 	});
 	util::debug_output("Adding backward edges\n");
 	g.set_edges(std::move(nbh_backward));

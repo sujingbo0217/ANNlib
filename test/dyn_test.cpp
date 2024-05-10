@@ -73,8 +73,8 @@ struct desc{
 	}
 
 	template<typename Nid, class Ext, class Edge>
-	using graph_t = ANN::graph::adj_seq<Nid,Ext,Edge>;
-	// using graph_t = ANN::graph::adj_map<Nid,Ext,Edge>;
+	// using graph_t = ANN::graph::adj_seq<Nid,Ext,Edge>;
+	using graph_t = ANN::graph::adj_map<Nid,Ext,Edge>;
 
 	template<typename Nid, class Ext, class Edge>
 	using graph_aux = ANN::graph::adj_map<Nid,Ext,Edge>;
@@ -368,19 +368,19 @@ auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k, 
 	using pid_t = typename U::point_t::id_t;
 	std::priority_queue<std::pair<float, pid_t>> top_candidates;
 	float lower_bound = std::numeric_limits<float>::min();
-	float upper_bound = std::numeric_limits<float>::max();
 	
 	for(size_t i=0; i<data.size(); ++i)
 	{
 		const auto &u = data[i];	// id, point
 		std::vector<L> inter;
 		std::set_intersection(base_labels[i].begin(), base_labels[i].end(), query_label.begin(), query_label.end(), std::back_inserter(inter));
-		// float dist = U::distance(u.get_coord(), q.get_coord(), dim);
-		float dist = (inter.size() == 0 ? upper_bound : U::distance(u.second.get_coord(), q.get_coord(), dim));
+		
+		if (inter.size() == 0) continue;
+		float dist = U::distance(u.second.get_coord(), q.get_coord(), dim);
 
 		// only keep the top k
 		if (top_candidates.size() < k || dist < lower_bound) {
-			top_candidates.emplace(dist, u.second.get_id());
+			top_candidates.emplace(dist, u.first);
 			if (top_candidates.size() > k) {
 				top_candidates.pop();
 			}
@@ -429,12 +429,14 @@ void calc_recall(const S1 &q, const S2 &res, const S3 &gt, uint32_t k)
 	for(uint32_t i=0; i<cnt_query; ++i)
 	{
 		uint32_t cnt_shot = 0;
-		for(uint32_t j=0; j<k; ++j)
+		for(uint32_t j=0; j<k; ++j) {
+			// std::cout << res[i][j].pid << ", " << gt[i][j] << '\n';
 			if(std::find_if(res[i].begin(),res[i].end(),[&](const auto &p){
 				return p.pid==gt[i][j];}) != res[i].end()) // TODO: fix naming
 			{
 				cnt_shot++;
 			}
+		}
 		result[cnt_shot]++;
 	}
 	size_t total_shot = 0;
@@ -470,6 +472,7 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	auto [F_b, P] = load_label<L>(file_label_in, size_max);
 	t.next("Load base labels");
 	printf("Load %lu base points w/ labels\n", F_b.size());
+	const size_t n_unique_label = P.size();
 
 	using T = typename U::point_t::elem_t;
 	auto [ps,dim] = load_point(file_in, to_point<T>, size_max);
@@ -500,14 +503,16 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	puts("Initialize base vamana");
 
 	auto Merge = [](vamana<U> from, vamana<U>& to) {
-		// from.g.iter_each_nid([&](typename vamana<U>::nid_t nid) {
-		for (typename vamana<U>::nid_t nid : from.existed_points) {
-			std::cerr << "nid: " << nid << '\n';
+		from.g.iter_each_nid([&](typename vamana<U>::nid_t nid) {
+		// for (typename vamana<U>::nid_t nid : from.existed_points) {
+			// std::cerr << "nid: " << nid << '\n';
 			if (to.is_node_existed(nid)) {
 				auto new_edges = to.g.get_edges(nid);
 				auto edge_v = ANN::util::to<typename vamana<U>::seq_edge>(std::move(new_edges));
+				// std::cerr << "Exist edge total before: " << edge_v.size() << '\n';
 				edge_v.insert(edge_v.end(), std::make_move_iterator(new_edges.begin()), 
 						std::make_move_iterator(new_edges.end()));
+				// std::cerr << "Exist edge total after: " << edge_v.size() << '\n';
 				// edge_v.insert(edge_v.end(), new_edges.begin(), new_edges.end());
 				typename vamana<U>::seq_conn conn_v = ANN::algo::prune_simple(
 					to.conn_cast(std::move(edge_v)), to.get_deg_bound());
@@ -521,8 +526,8 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 				auto edges = from.g.get_edges(nid);
 				to.g.set_edges(nid, std::move(edges));
 			}
-		}
-		// });
+		// }
+		});
 		for (const auto& ep : from.entrance) {
 			to.entrance.push_back(ep);
 		}
@@ -530,7 +535,7 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 		to.entrance.erase(std::unique(to.entrance.begin(), to.entrance.end()), to.entrance.end());
 	};
 
-	// bool is_first_insert = true;
+	size_t idx = 0;
 	for (const auto& [f, Pf] : P) {
 		std::cerr << f << " " << Pf.size() << '\n';
 		// parlay::sequence<typename decltype(ps)::value_type> new_ps(Pf.size());
@@ -543,13 +548,12 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 			base_labels[i] = F_b[Pf[i]];
 		});
 
-		std::cerr << new_ps.size() << " " << base_labels.size() << '\n';
-
 		// for(size_t size_last=0, size_curr=size_init; size_curr<=std::min<size_t>(size_max, new_ps.size()); size_last=size_curr, size_curr+=size_step)
 		// {
 			// printf("Increasing size from %lu to %lu\n", size_last, size_curr);
 
 			puts("Insert points");
+			printf("Inserted points w/ label: %lu/%lu\n", ++idx, n_unique_label);
 			parlay::internal::timer t("run_test:insert", true);
 
 			// auto ins_begin = new_ps.begin() + size_last;
@@ -578,28 +582,50 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 			// snapshots.push_back(g);
 
 			// puts("Collect statistics");
-			print_stat(base);
+			// print_stat(base);
 
-			puts("Search for neighbors");
-			auto res = find_nbhs(base, q, k, ef, F_q);
+			// puts("Search for neighbors");
+			// auto res = find_nbhs(base, q, k, ef, F_q);
 
-			puts("Generate groundtruth");
-			// auto baseset = parlay::make_slice(ps.begin(), ins_end);
-			// auto gt = ConstructKnng<U>(baseset, q, dim, k);
+			// puts("Generate groundtruth");
+			// // auto baseset = parlay::make_slice(ps.begin(), ins_end);
+			// // auto gt = ConstructKnng<U>(baseset, q, dim, k);
 			
-			// auto baseset = parlay::make_slice(new_ps.begin(), ins_end);
-			// std::vector label_slice(F_b.begin(), F_b.begin() + size_curr);
-			// auto gt = ConstructKnng<U>(baseset, q, dim, k, label_slice, F_q);
+			// // auto baseset = parlay::make_slice(new_ps.begin(), ins_end);
+			// // std::vector label_slice(F_b.begin(), F_b.begin() + size_curr);
+			// // auto gt = ConstructKnng<U>(baseset, q, dim, k, label_slice, F_q);
 
-			auto gt = ConstructKnng<U>(new_ps, q, dim, k, base_labels, F_q);
+			// auto gt = ConstructKnng<U>(new_ps, q, dim, k, base_labels, F_q);
 
-			puts("Compute recall");
-			calc_recall(q, res, gt, k);
+			// puts("Compute recall");
+			// calc_recall(q, res, gt, k);
 
-			puts("---");
+			// puts("---");
 		// }
 	}
 
+	puts("Search for neighbors");
+	auto res = find_nbhs(base, q, k, ef, F_q);
+
+	puts("Generate groundtruth");
+	// auto baseset = parlay::make_slice(ps.begin(), ins_end);
+	// auto gt = ConstructKnng<U>(baseset, q, dim, k);
+	
+	// auto baseset = parlay::make_slice(new_ps.begin(), ins_end);
+	// std::vector label_slice(F_b.begin(), F_b.begin() + size_curr);
+	// auto gt = ConstructKnng<U>(baseset, q, dim, k, label_slice, F_q);
+
+	parlay::sequence<std::pair<L, typename decltype(ps)::value_type>> new_ps(ps.size());
+	parlay::parallel_for(0, ps.size(), [&](size_t i) {
+		new_ps[i] = std::make_pair(i, *(ps.begin() + i));
+	});
+	assert(new_ps.size() == F_b.size());
+	auto gt = ConstructKnng<U>(new_ps, q, dim, k, F_b, F_q);
+
+	puts("Compute recall");
+	calc_recall(q, res, gt, k);
+	
+	puts("---");
 	// print_stat_snapshots(snapshots);
 }
 
