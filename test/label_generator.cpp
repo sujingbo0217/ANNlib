@@ -180,7 +180,7 @@ int main(int argc, char** argv) {
       std::cerr << "Error: could not open output file " << output_file << std::endl;
       return -1;
     }
-    
+
     // add total points to the first line
     outfile << num_points << std::endl;
 

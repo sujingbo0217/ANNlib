@@ -2,70 +2,66 @@
 #define _ANN_GRAPH_HPP
 
 #include <type_traits>
+
 #include "ANN.hpp"
 
-namespace ANN{
-namespace graph{
+namespace ANN {
+  namespace graph {
 
-class base
-{
-	struct node;
-public:
-	using nid_t = uint32_t;
-	struct node_ptr;
-	struct node_cptr;
-	// TODO: update interfaces
-	node_ptr get_node(nid_t);
-	node_cptr get_node(nid_t) const;
-	template<class Seq>
-	Seq get_edges(node_cptr) const;
-	template<class Seq>
-	Seq get_edges(nid_t) const;
-	template<class Seq>
-	void set_edges(nid_t, Seq&&);
-	void add_node(nid_t);
-	template<class Seq>
-	void add_nodes(Seq&&);
-	size_t num_nodes() const;
-};
+    class base {
+      struct node;
 
-template<class>
-class shim;
+     public:
+      using nid_t = uint32_t;
+      struct node_ptr;
+      struct node_cptr;
+      // TODO: update interfaces
+      node_ptr get_node(nid_t);
+      node_cptr get_node(nid_t) const;
+      template<class Seq>
+      Seq get_edges(node_cptr) const;
+      template<class Seq>
+      Seq get_edges(nid_t) const;
+      template<class Seq>
+      void set_edges(nid_t, Seq &&);
+      void add_node(nid_t);
+      template<class Seq>
+      void add_nodes(Seq &&);
+      size_t num_nodes() const;
+    };
 
-enum class file_format{
-	BUILTIN
-};
+    template<class>
+    class shim;
 
-namespace detail{
+    enum class file_format { BUILTIN };
 
-template<class T>
-const static bool constexpr is_graph = std::is_base_of_v<base,T>;
-/*
-template<class T>
-concept Graph = is_graph<T>
-*/
+    namespace detail {
 
-} // namespace detail
+      template<class T>
+      const static bool constexpr is_graph = std::is_base_of_v<base, T>;
+      /*
+      template<class T>
+      concept Graph = is_graph<T>
+      */
 
-template<class G>
-void save(const G &g, const std::string &name, file_format type)
-{
-	static_assert(detail::is_graph<G>);
-}
+    }  // namespace detail
 
-template<class G>
-G load(const std::string &name, file_format type)
-{
-	static_assert(detail::is_graph<G>);
-}
+    template<class G>
+    void save(const G &g, const std::string &name, file_format type) {
+      static_assert(detail::is_graph<G>);
+    }
 
-template<class To, class From>
-To cast(From &&g)
-{
-	static_assert(detail::is_graph<From>&&detail::is_graph<To>);
-}
+    template<class G>
+    G load(const std::string &name, file_format type) {
+      static_assert(detail::is_graph<G>);
+    }
 
-} // namespace graph
-} // namespace ANN
+    template<class To, class From>
+    To cast(From &&g) {
+      static_assert(detail::is_graph<From> && detail::is_graph<To>);
+    }
 
-#endif // _ANN_GRAPH_HPP
+  }  // namespace graph
+}  // namespace ANN
+
+#endif  // _ANN_GRAPH_HPP
