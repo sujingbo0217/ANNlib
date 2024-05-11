@@ -38,7 +38,8 @@ namespace ANN {
     };
 
     template<class L = lookup_custom_tag<>, class E, class D, class Seq>
-    auto beamSearch(E &&f_nbhs, D &&f_dist, const Seq &eps, uint32_t ef, const search_control &ctrl = {}) {
+    auto beamSearch(E &&f_nbhs, D &&f_dist, const Seq &eps, uint32_t ef,
+                    const search_control &ctrl = {}) {
       using cm = custom<typename L::type>;
       using nid_t = typename Seq::value_type;
       using conn = util::conn<nid_t>;
@@ -107,8 +108,8 @@ namespace ANN {
     }
 
     template<class L = lookup_custom_tag<>, class E, class D, class G, class Seq, typename label_t>
-    auto beamSearch(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef, const std::vector<label_t> &F,
-                    const search_control &ctrl = {}) {
+    auto beamSearch(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef,
+                    const std::vector<label_t> &F, const search_control &ctrl = {}) {
       using cm = custom<typename L::type>;
       using nid_t = typename Seq::value_type;
       using conn = util::conn<nid_t>;
@@ -220,7 +221,8 @@ namespace ANN {
     }
 
     template<class L = lookup_custom_tag<>, class Seq, class E, class D>
-    auto /*Seq*/ prune_heuristic(Seq cand, uint32_t size, E &&f_nbhs, D &&f_dist, const prune_control &ctrl = {}) {
+    auto /*Seq*/ prune_heuristic(Seq cand, uint32_t size, E &&f_nbhs, D &&f_dist,
+                                 const prune_control &ctrl = {}) {
       using cm = custom<typename L::type>;
       using nid_t = detail::second_elem_t<typename Seq::value_type>;
       using conn = util::conn<nid_t>;
@@ -274,7 +276,8 @@ namespace ANN {
         size_t cnt_recycle = std::min(pruned.size(), size - res.size());
         auto split = pruned.begin() + cnt_recycle;
         std::nth_element(pruned.begin(), split, pruned.end());
-        res.insert(res.end(), std::make_move_iterator(pruned.begin()), std::make_move_iterator(split));
+        res.insert(res.end(), std::make_move_iterator(pruned.begin()),
+                   std::make_move_iterator(split));
       }
       return res;
     }

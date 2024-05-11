@@ -36,7 +36,8 @@ namespace ANN::external {
     using seq = parlay::sequence<T>;
 
     template<typename F>
-    static void parallel_for(size_t start, size_t stop, F f, long granularity = 0, bool conservative = false) {
+    static void parallel_for(size_t start, size_t stop, F f, long granularity = 0,
+                             bool conservative = false) {
       parlay::parallel_for(start, stop, std::move(f), granularity, conservative);
     }
 
@@ -56,13 +57,16 @@ namespace ANN::external {
              class T = std::remove_reference_t<typename std::remove_reference_t<R>::value_type>,
              class BinaryOp = std::plus<>>
     static auto reduce(R &&range, T init = {}, BinaryOp op = {}) {
-      return parlay::reduce(std::forward<R>(range), parlay::binary_op(std::move(op), std::move(init)));
+      return parlay::reduce(std::forward<R>(range),
+                            parlay::binary_op(std::move(op), std::move(init)));
     }
 
-    template<typename Iter, class T = std::remove_reference_t<typename std::iterator_traits<Iter>::value_type>,
+    template<typename Iter,
+             class T = std::remove_reference_t<typename std::iterator_traits<Iter>::value_type>,
              class BinaryOp = std::plus<>>
     static auto reduce(Iter begin, Iter end, T init = {}, BinaryOp op = {}) {
-      return parlay::reduce(parlay::make_slice(begin, end), parlay::binary_op(std::move(op), std::move(init)));
+      return parlay::reduce(parlay::make_slice(begin, end),
+                            parlay::binary_op(std::move(op), std::move(init)));
     }
 
     static auto worker_id() {

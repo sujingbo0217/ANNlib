@@ -17,7 +17,8 @@ using ANN::util::debug_output;
 
 namespace ANN::graph {
 
-  template<class Nid, class Ext, class Edge, template<typename, typename> class TCtrV, template<typename> class TCtrE>
+  template<class Nid, class Ext, class Edge, template<typename, typename> class TCtrV,
+           template<typename> class TCtrE>
   class adj_base : base {
    public:
     using nid_t = Nid;
@@ -215,7 +216,8 @@ namespace ANN::graph {
 
   }  // namespace detail
 
-  template<class Nid, class Ext, class Edge = Nid, template<typename, typename> class TMapV = detail::map_seq,
+  template<class Nid, class Ext, class Edge = Nid,
+           template<typename, typename> class TMapV = detail::map_seq,
            template<typename> class TSeqE = detail::seq_default>
   class adj_seq : public adj_base<Nid, Ext, Edge, TMapV, TSeqE> {
     static_assert(std::is_default_constructible_v<Ext>);
@@ -294,11 +296,13 @@ namespace ANN::graph {
     // TODO: eliminate redundant code by deducing 'this' in C++23
     template<class F>
     void for_each(F &&f) const {
-      cm::parallel_for(0, nodes.size(), [&, it = nodes.begin()](size_t i) { f(gen_node_cptr(&it[i])); });
+      cm::parallel_for(0, nodes.size(),
+                       [&, it = nodes.begin()](size_t i) { f(gen_node_cptr(&it[i])); });
     }
     template<class F>
     void for_each(F &&f) {
-      cm::parallel_for(0, nodes.size(), [&, it = nodes.begin()](size_t i) { f(gen_node_ptr(&it[i])); });
+      cm::parallel_for(0, nodes.size(),
+                       [&, it = nodes.begin()](size_t i) { f(gen_node_ptr(&it[i])); });
     }
     template<class F>
     void for_each_nid(F &&f) {
@@ -306,7 +310,8 @@ namespace ANN::graph {
     }
   };
 
-  template<class Nid, class Ext, class Edge = Nid, template<typename, typename> class TMapV = detail::map_default,
+  template<class Nid, class Ext, class Edge = Nid,
+           template<typename, typename> class TMapV = detail::map_default,
            template<typename> class TSeqE = detail::seq_default>
   class adj_map : public adj_base<Nid, Ext, Edge, TMapV, TSeqE> {
     using _base = adj_base<Nid, Ext, Edge, TMapV, TSeqE>;
@@ -374,7 +379,7 @@ namespace ANN::graph {
     }
     template<class F>
     void for_each_nid(F &&f) {
-      util::for_each(nodes, [&](size_t i) { f(nid_t(i)); });
+      util::for_each(nodes, [&](const auto &node) { f(nid_t(node.first)); });
     }
   };
 

@@ -93,9 +93,10 @@ void visit_point(const T &array, size_t dim0, size_t dim1) {
 }
 
 template<class U>
-double output_recall(vamana<U> &g, parlay::internal::timer &t, uint32_t ef, uint32_t k, uint32_t cnt_query,
-                     parlay::sequence<typename U::point_t> &q, parlay::sequence<parlay::sequence<uint32_t>> &gt,
-                     uint32_t rank_max, float beta, bool warmup, std::optional<float> radius,
+double output_recall(vamana<U> &g, parlay::internal::timer &t, uint32_t ef, uint32_t k,
+                     uint32_t cnt_query, parlay::sequence<typename U::point_t> &q,
+                     parlay::sequence<parlay::sequence<uint32_t>> &gt, uint32_t rank_max,
+                     float beta, bool warmup, std::optional<float> radius,
                      std::optional<uint32_t> limit_eval, bool refactor) {
   per_visited.resize(cnt_query);
   per_eval.resize(cnt_query);
@@ -179,8 +180,9 @@ double output_recall(vamana<U> &g, parlay::internal::timer &t, uint32_t ef, uint
       uint32_t cnt_shot = 0;
       for (uint32_t j = 0; j < k; ++j)
         if (std::find_if(res[i].begin(), res[i].end(),
-                         [&](const std::pair<float, uint32_t> &p) { return p.second == gt[i][j]; }) !=
-            res[i].end())  // TODO: more checks
+                         [&](const std::pair<float, uint32_t> &p) {
+                           return p.second == gt[i][j];
+                         }) != res[i].end())  // TODO: more checks
         {
           cnt_shot++;
         }
@@ -261,8 +263,8 @@ void output_recall(vamana<U> &g, uint32_t dim, commandLine param, parlay::intern
     double best_recall = 0;
     // float best_beta = beta[0];
     for (auto b : beta) {
-      const double cur_recall =
-          output_recall(g, t, ef, k, cnt_query, q, gt, rank_max, b, enable_warmup, radius, limit_eval, refactor);
+      const double cur_recall = output_recall(g, t, ef, k, cnt_query, q, gt, rank_max, b,
+                                              enable_warmup, radius, limit_eval, refactor);
       if (cur_recall > best_recall) {
         best_recall = cur_recall;
         // best_beta = b;
@@ -404,13 +406,14 @@ int main(int argc, char **argv) {
   for (int i = 0; i < argc; ++i) printf("%s ", argv[i]);
   putchar('\n');
 
-  commandLine parameter(argc, argv,
-                        "-type <elemType> -dist <distance> -n <numInput> -ml <m_l> -m <m> [--reorder] "
-                        "-efc <ef_construction> -alpha <alpha> "
-                        "--symm [-b <batchBase>] [--refactor] [-rank_frac <frac>=1.0] [-prune new_m]"
-                        "-in <inFile> -out <outFile> -q <queryFile> -g <groundtruthFile> [-k <numQuery>=all] "
-                        "-ef <ef_query>,... -r <recall@R>,... -th <threshold>,... [-beta <beta>,...] "
-                        "-le <limit_num_eval> [-w <warmup>] [-rad radius (for range search)]");
+  commandLine parameter(
+      argc, argv,
+      "-type <elemType> -dist <distance> -n <numInput> -ml <m_l> -m <m> [--reorder] "
+      "-efc <ef_construction> -alpha <alpha> "
+      "--symm [-b <batchBase>] [--refactor] [-rank_frac <frac>=1.0] [-prune new_m]"
+      "-in <inFile> -out <outFile> -q <queryFile> -g <groundtruthFile> [-k <numQuery>=all] "
+      "-ef <ef_query>,... -r <recall@R>,... -th <threshold>,... [-beta <beta>,...] "
+      "-le <limit_num_eval> [-w <warmup>] [-rad radius (for range search)]");
 
   const char *dist_func = parameter.getOptionValue("-dist");
   auto run_test_helper = [&](auto type) {  // emulate a generic lambda in C++20

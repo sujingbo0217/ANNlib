@@ -113,7 +113,8 @@ namespace detail {
 }  // namespace detail
 
 template<typename T, ptr_mapped_src Src>
-using ptr_mapped = std::conditional_t<Src == ptr_mapped_src::NATIVE, T *, detail::ptr_mapped_impl<T, Src>>;
+using ptr_mapped =
+    std::conditional_t<Src == ptr_mapped_src::NATIVE, T *, detail::ptr_mapped_impl<T, Src>>;
 /*
 template<typename T, ptr_mapped_src Src>
 struct std::iterator_traits<detail::ptr_mapped_impl<T,Src>>

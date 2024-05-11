@@ -115,7 +115,8 @@ class ZipfDistribution {
     for (uint32_t i{0}; i < num_points; i++) {
       bool label_written = false;
       for (auto it = distribution_map.cbegin(); it != distribution_map.cend(); it++) {
-        auto label_selection_probability = std::bernoulli_distribution(distribution_factor / (double)it->first);
+        auto label_selection_probability =
+            std::bernoulli_distribution(distribution_factor / (double)it->first);
         if (label_selection_probability(rand_engine) && distribution_map[it->first] > 0) {
           if (label_written) {
             outfile << ',';
@@ -171,8 +172,8 @@ int main(int argc, char** argv) {
   if (dist_type == NULL) P.badArgument();
   std::string distribution_type = std::string(dist_type);
 
-  std::cout << "Generating synthetic labels for " << num_points << " points with " << num_labels << " unique labels"
-            << std::endl;
+  std::cout << "Generating synthetic labels for " << num_points << " points with " << num_labels
+            << " unique labels" << std::endl;
 
   try {
     std::ofstream outfile(output_file);

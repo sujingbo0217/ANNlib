@@ -24,7 +24,9 @@ struct inner_t {};
 // Wrap a (fancy) pointer type UPtr to meet the requirements of A::pointer
 // where A is an Allocator following the C++ named requirements
 template<class UPtr>
-class ptr_adapter : public UPtr, public ANN::util::enable_rand_iter<ptr_adapter<UPtr>, size_t, ANN::util::empty> {
+class ptr_adapter
+    : public UPtr,
+      public ANN::util::enable_rand_iter<ptr_adapter<UPtr>, size_t, ANN::util::empty> {
   using base_ptr = UPtr;
   using base_iter = ANN::util::enable_rand_iter<ptr_adapter<UPtr>, size_t, ANN::util::empty>;
   using T = typename UPtr::element_type;
@@ -38,11 +40,13 @@ class ptr_adapter : public UPtr, public ANN::util::enable_rand_iter<ptr_adapter<
   ptr_adapter(const ptr_adapter &) = default;
   ptr_adapter(ptr_adapter &&) = default;
   template<typename... Args>
-  ptr_adapter(inner_t, size_t offset, Args &&...args) : base_ptr(std::forward<Args>(args)...), base_iter(offset) {}
-  template<typename A, typename... Args,
-           typename = std::enable_if_t<
-               !std::is_same_v<std::remove_cv_t<std::remove_reference_t<A>>,
-                               ptr_adapter<typename std::pointer_traits<UPtr>::template rebind<std::remove_cv_t<T>>>>>>
+  ptr_adapter(inner_t, size_t offset, Args &&...args)
+      : base_ptr(std::forward<Args>(args)...), base_iter(offset) {}
+  template<
+      typename A, typename... Args,
+      typename = std::enable_if_t<!std::is_same_v<
+          std::remove_cv_t<std::remove_reference_t<A>>,
+          ptr_adapter<typename std::pointer_traits<UPtr>::template rebind<std::remove_cv_t<T>>>>>>
   ptr_adapter(A &&a, Args &&...args)
       : ptr_adapter(inner_t{}, size_t(0), std::forward<A>(a), std::forward<Args>(args)...) {}
   ptr_adapter &operator=(const ptr_adapter &) = default;
@@ -80,8 +84,9 @@ class ptr_adapter : public UPtr, public ANN::util::enable_rand_iter<ptr_adapter<
     return !operator==(null);
   }
 
-  template<typename U = T, class CUPtr = std::enable_if_t<!std::is_const_v<U>,
-                                                          typename std::pointer_traits<UPtr>::template rebind<const U>>>
+  template<typename U = T,
+           class CUPtr = std::enable_if_t<
+               !std::is_const_v<U>, typename std::pointer_traits<UPtr>::template rebind<const U>>>
   operator ptr_adapter<CUPtr>() const {
     return {inner_t{}, base_iter::get_pos(), static_cast<const base_ptr &>(*this)};
   }
@@ -110,7 +115,8 @@ class shared_allocator : public Alloc {
   template<typename... Args>
   pointer allocate(sz_t n, Args... args) {
     return pointer(
-        Alloc::allocate(n, std::forward<Args>(args)...), [=](auto *p) { this->Alloc::deallocate(p, n); }, base());
+        Alloc::allocate(n, std::forward<Args>(args)...),
+        [=](auto *p) { this->Alloc::deallocate(p, n); }, base());
   }
 
   void deallocate(pointer &p, sz_t /*n*/) {
@@ -386,7 +392,8 @@ class graph_cpam : ANN::graph::base {
     vinfo_trivial_ext() noexcept = default;
     vinfo_trivial_ext(ext_t ext) : ext(std::move(ext)) {}
     vinfo_trivial_ext(edgelist edges) : vinfo_edges(std::move(edges)), ext() {}
-    vinfo_trivial_ext(ext_t ext, edgelist edges) : vinfo_edges(std::move(edges)), ext(std::move(ext)) {}
+    vinfo_trivial_ext(ext_t ext, edgelist edges)
+        : vinfo_edges(std::move(edges)), ext(std::move(ext)) {}
 
    private:
     raw_t ext;
@@ -415,14 +422,15 @@ class graph_cpam : ANN::graph::base {
     vinfo_both_shared() noexcept = default;
     vinfo_both_shared(ext_t ext) : ext(std::move(ext)) {}
     vinfo_both_shared(edgelist edges) : vinfo_edges(std::move(edges)) {}
-    vinfo_both_shared(ext_t ext, edgelist edges) : vinfo_edges(std::move(edges)), ext(std::move(ext)) {}
+    vinfo_both_shared(ext_t ext, edgelist edges)
+        : vinfo_edges(std::move(edges)), ext(std::move(ext)) {}
 
    private:
     raw_t ext;
   };
 
-  using vinfo = std::conditional_t<std::is_trivially_copyable_v<ext_t> && sizeof(ext_t) <= 64, vinfo_trivial_ext,
-                                   vinfo_both_shared>;
+  using vinfo = std::conditional_t<std::is_trivially_copyable_v<ext_t> && sizeof(ext_t) <= 64,
+                                   vinfo_trivial_ext, vinfo_both_shared>;
 
   struct node_entry {
     using key_t = nid_t;

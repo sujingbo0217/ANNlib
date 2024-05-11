@@ -80,6 +80,20 @@
     "thread": "cpp",
     "typeinfo": "cpp",
     "variant": "cpp",
-    "charconv": "cpp"
+    "charconv": "cpp",
+    "csetjmp": "cpp",
+    "csignal": "cpp",
+    "strstream": "cpp",
+    "bitset": "cpp",
+    "cfenv": "cpp",
+    "codecvt": "cpp",
+    "cuchar": "cpp",
+    "regex": "cpp",
+    "future": "cpp",
+    "scoped_allocator": "cpp",
+    "shared_mutex": "cpp",
+    "typeindex": "cpp",
+    "valarray": "cpp",
+    "filesystem": "cpp"
   }
 }

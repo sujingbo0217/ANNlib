@@ -65,7 +65,8 @@ namespace efanna2e {
         AVX_L2SQR(l + 8, r + 8, sum, l1, r1);
       }
       _mm256_storeu_ps(unpack, sum);
-      result = unpack[0] + unpack[1] + unpack[2] + unpack[3] + unpack[4] + unpack[5] + unpack[6] + unpack[7];
+      result = unpack[0] + unpack[1] + unpack[2] + unpack[3] + unpack[4] + unpack[5] + unpack[6] +
+               unpack[7];
 
 #else
 #ifdef __SSE2__
@@ -172,7 +173,8 @@ namespace efanna2e {
         AVX_DOT(l + 8, r + 8, sum, l1, r1);
       }
       _mm256_storeu_ps(unpack, sum);
-      result = unpack[0] + unpack[1] + unpack[2] + unpack[3] + unpack[4] + unpack[5] + unpack[6] + unpack[7];
+      result = unpack[0] + unpack[1] + unpack[2] + unpack[3] + unpack[4] + unpack[5] + unpack[6] +
+               unpack[7];
 
 #else
 #ifdef __SSE2__
@@ -267,7 +269,8 @@ namespace efanna2e {
         AVX_L2NORM(l + 8, sum, l1);
       }
       _mm256_storeu_ps(unpack, sum);
-      result = unpack[0] + unpack[1] + unpack[2] + unpack[3] + unpack[4] + unpack[5] + unpack[6] + unpack[7];
+      result = unpack[0] + unpack[1] + unpack[2] + unpack[3] + unpack[4] + unpack[5] + unpack[6] +
+               unpack[7];
 #else
 #ifdef __SSE2__
 #define SSE_L2NORM(addr, dest, tmp) \
@@ -328,7 +331,8 @@ namespace efanna2e {
       return result;
     }
     using DistanceInnerProduct::compare;
-    float compare(const float *a, const float *b, float norm, unsigned size) const {  // not implement
+    float compare(const float *a, const float *b, float norm,
+                  unsigned size) const {  // not implement
       float result = -2 * DistanceInnerProduct::compare(a, b, size);
       result += norm;
       return result;
@@ -380,7 +384,8 @@ float mips_distance(float *p, float *q, unsigned d) {
 float distance(uint8_t *p, uint8_t *q, unsigned d) {
   int result = 0;
   for (unsigned i = 0; i < d; i++) {
-    result += ((int32_t)((int16_t)q[i] - (int16_t)p[i])) * ((int32_t)((int16_t)q[i] - (int16_t)p[i]));
+    result +=
+        ((int32_t)((int16_t)q[i] - (int16_t)p[i])) * ((int32_t)((int16_t)q[i] - (int16_t)p[i]));
   }
   return (float)result;
 }
@@ -388,7 +393,8 @@ float distance(uint8_t *p, uint8_t *q, unsigned d) {
 float distance(int8_t *p, int8_t *q, unsigned d) {
   int result = 0;
   for (unsigned i = 0; i < d; i++) {
-    result += ((int32_t)((int16_t)q[i] - (int16_t)p[i])) * ((int32_t)((int16_t)q[i] - (int16_t)p[i]));
+    result +=
+        ((int32_t)((int16_t)q[i] - (int16_t)p[i])) * ((int32_t)((int16_t)q[i] - (int16_t)p[i]));
   }
   return (float)result;
 }

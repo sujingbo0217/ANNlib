@@ -63,7 +63,8 @@ class point {
   point() : id(~0u), coord(NULL), closure() {}
   point(uint32_t id_, const T *coord) : id(id_), coord(coord), closure() {}
   template<class C>
-  point(uint32_t id_, const T *coord, C &&closure_) : id(id_), coord(coord), closure(std::forward<C>(closure_)) {}
+  point(uint32_t id_, const T *coord, C &&closure_)
+      : id(id_), coord(coord), closure(std::forward<C>(closure_)) {}
 
   id_t get_id() const {
     return id;
@@ -109,7 +110,8 @@ class point_converter_default {
 };
 
 template<typename Src, class Conv>
-inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_vec(const char *file, Conv converter,
+inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_vec(const char *file,
+                                                                                Conv converter,
                                                                                 uint32_t max_num) {
   const auto [fileptr, length] = mmapStringFromFile(file);
 
@@ -158,8 +160,10 @@ class trait_type<parlay::sequence<T>, void> {
 };
 
 template<class Conv>
-inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_HDF5(const char *file, const char *dir,
-                                                                                 Conv converter, uint32_t max_num) {
+inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_HDF5(const char *file,
+                                                                                 const char *dir,
+                                                                                 Conv converter,
+                                                                                 uint32_t max_num) {
 #ifndef SUPPORT_HDF5
   (void)file;
   (void)dir;
@@ -185,7 +189,8 @@ inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_HDF5
 }
 
 template<typename Src, class Conv>
-inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_bin(const char *file, Conv converter,
+inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_bin(const char *file,
+                                                                                Conv converter,
                                                                                 uint32_t max_num) {
   auto [fileptr, length] = mmapStringFromFile(file);
   (void)length;
@@ -205,8 +210,8 @@ inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_bin(
 }
 
 template<typename Src, class Conv>
-inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_range(const char *file, Conv converter,
-                                                                                  uint32_t max_num) {
+inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_range(
+    const char *file, Conv converter, uint32_t max_num) {
   auto [fileptr, length] = mmapStringFromFile(file);
   (void)length;
   const int32_t num_points = *(int32_t *)fileptr;
@@ -235,7 +240,8 @@ inline std::pair<parlay::sequence<typename Conv::type>, uint32_t> load_from_rang
 }
 /*
 template<typename Src=void, class Conv>
-inline auto load_point(const char *file, file_format input_format, Conv converter, size_t max_num=0, std::any aux={})
+inline auto load_point(const char *file, file_format input_format, Conv converter, size_t max_num=0,
+std::any aux={})
 {
         if(!max_num)
                 max_num = std::numeric_limits<decltype(max_num)>::max();
@@ -282,8 +288,8 @@ inline auto load_point(const char *input_name, Conv converter, size_t max_num = 
 }
 
 template<typename L>
-inline std::pair<std::vector<std::vector<uint32_t>>, std::unordered_map<L, std::vector<uint32_t>>> load_label(
-    const char *file_path, size_t max_size = 0) {
+inline std::pair<std::vector<std::vector<uint32_t>>, std::unordered_map<L, std::vector<uint32_t>>>
+load_label(const char *file_path, size_t max_size = 0) {
   std::ifstream file(file_path);
   if (!file) {
     std::cerr << "Error: Unable to open file " << file_path << std::endl;
@@ -311,12 +317,13 @@ inline std::pair<std::vector<std::vector<uint32_t>>, std::unordered_map<L, std::
       P[label].push_back(static_cast<uint32_t>(i));
       node_iss >> comma;
     }
+    std::sort(node_labels.begin(), node_labels.end());
     F.push_back(node_labels);
     total_labels += node_labels.size();
     ++i;
   }
-  std::cout << std::fixed << std::setprecision(2) << "Filters per Point: " << (float)total_labels / (float)num_points
-            << std::endl;
+  std::cout << std::fixed << std::setprecision(2)
+            << "Filters per Point: " << (float)total_labels / (float)num_points << std::endl;
   file.close();
   return std::make_pair(F, P);
 }

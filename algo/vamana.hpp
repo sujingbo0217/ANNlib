@@ -98,7 +98,8 @@ namespace ANN {
     void insert(Iter begin, Iter end, float batch_base = 2);
 
     template<typename Iter>
-    void insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F, float batch_base = 2);
+    void insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F,
+                float batch_base = 2);
 
     void insert(const nid_t &nid, const coord_t &coord, const std::vector<label_t> &F);
 
@@ -163,7 +164,7 @@ namespace ANN {
       return R;
     }
 
-   private:
+   public:
     auto gen_f_dist(const coord_t &c) const {
       class dist_evaluator {
         std::reference_wrapper<const graph_t> g;
@@ -176,7 +177,8 @@ namespace ANN {
           return Desc::distance(c, g.get().get_node(v)->get_coord(), dim);
         }
         dist_t operator()(nid_t u, nid_t v) const {
-          return Desc::distance(g.get().get_node(u)->get_coord(), g.get().get_node(v)->get_coord(), dim);
+          return Desc::distance(g.get().get_node(u)->get_coord(), g.get().get_node(v)->get_coord(),
+                                dim);
         }
       };
 
@@ -253,21 +255,23 @@ namespace ANN {
   };
 
   template<class Desc>
-  vamana<Desc>::vamana(uint32_t dim, uint32_t R, uint32_t L, float alpha) : dim(dim), R(R), L(L), alpha(alpha) {}
+  vamana<Desc>::vamana(uint32_t dim, uint32_t R, uint32_t L, float alpha)
+      : dim(dim), R(R), L(L), alpha(alpha) {}
 
   template<class Desc>
   template<typename Iter>
   void vamana<Desc>::insert(Iter begin, Iter end, float batch_base) {
     static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
-    static_assert(
-        std::is_base_of_v<std::random_access_iterator_tag, typename std::iterator_traits<Iter>::iterator_category>);
+    static_assert(std::is_base_of_v<std::random_access_iterator_tag,
+                                    typename std::iterator_traits<Iter>::iterator_category>);
 
     const size_t n = std::distance(begin, end);
     if (n == 0) return;
 
     // std::random_device rd;
     auto perm = cm::random_permutation(n /*, rd()*/);
-    auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + perm[i]); });
+    auto rand_seq =
+        util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + perm[i]); });
 
     size_t cnt_skip = 0;
     if (g.empty()) {
@@ -281,7 +285,8 @@ namespace ANN {
     float progress = 0.0;
     while (batch_end < n) {
       batch_begin = batch_end;
-      batch_end = std::min({n, (size_t)std::ceil(batch_begin * batch_base) + 1, batch_begin + size_limit});
+      batch_end =
+          std::min({n, (size_t)std::ceil(batch_begin * batch_base) + 1, batch_begin + size_limit});
 
       util::debug_output("Batch insertion: [%u, %u)\n", batch_begin, batch_end);
       insert_batch_impl(rand_seq.begin() + batch_begin, rand_seq.begin() + batch_end);
@@ -309,18 +314,21 @@ namespace ANN {
 
   template<class Desc>
   template<typename Iter>
-  void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F, float batch_base) {
+  void vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F,
+                            float batch_base) {
     // static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
-    static_assert(
-        std::is_base_of_v<std::random_access_iterator_tag, typename std::iterator_traits<Iter>::iterator_category>);
+    static_assert(std::is_base_of_v<std::random_access_iterator_tag,
+                                    typename std::iterator_traits<Iter>::iterator_category>);
 
     const size_t n = std::distance(begin, end);
     if (n == 0) return;
 
     // std::random_device rd;
     auto perm = cm::random_permutation(n /*, rd()*/);
-    auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + perm[i]); });
-    auto rand_label_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(F.begin() + perm[i]); });
+    auto rand_seq =
+        util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + perm[i]); });
+    auto rand_label_seq =
+        util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(F.begin() + perm[i]); });
 
     for (auto it = begin; it != end; it++) {
       set_point(it->first);
@@ -335,6 +343,11 @@ namespace ANN {
       const nid_t ep_init = id_map.insert(static_cast<pid_t>(it->first));
       g.add_node(ep_init, node_t{it->second.get_coord(), *(F.begin())});
       entrance.push_back(ep_init);
+      // additional entry point
+      // it++;
+      // const nid_t ep_second = id_map.insert(static_cast<pid_t>(it->first));
+      // g.add_node(ep_second, node_t{it->second.get_coord(), *(F.begin() + 1)});
+      // entrance.push_back(ep_second);
       cnt_skip = 1;
     }
 
@@ -342,7 +355,8 @@ namespace ANN {
     float progress = 0.0;
     while (batch_end < n) {
       batch_begin = batch_end;
-      batch_end = std::min({n, (size_t)std::ceil(batch_begin * batch_base) + 1, batch_begin + size_limit});
+      batch_end =
+          std::min({n, (size_t)std::ceil(batch_begin * batch_base) + 1, batch_begin + size_limit});
 
       // std::cerr << "(batch_begin, batch_end)" << batch_begin << " " << batch_end << '\n';
 
@@ -393,7 +407,8 @@ namespace ANN {
     // point to insert in the batch, associated with level[i]
     id_map.insert(util::delayed_seq(size_batch, [&](size_t i) { return (begin + i)->get_id(); }));
 
-    cm::parallel_for(0, size_batch, [&](uint32_t i) { nids[i] = id_map.get_nid((begin + i)->get_id()); });
+    cm::parallel_for(0, size_batch,
+                     [&](uint32_t i) { nids[i] = id_map.get_nid((begin + i)->get_id()); });
 
     g.add_nodes(util::delayed_seq(size_batch, [&](size_t i) {
       // GUARANTEE: begin[*].get_coord is only invoked for assignment once
@@ -414,7 +429,8 @@ namespace ANN {
 
       prune_control pctrl;  // TODO: use designated intializers in C++20
       pctrl.alpha = alpha;
-      seq<conn> conn_u = algo::prune_heuristic(std::move(res), get_deg_bound(), gen_f_nbhs(g), gen_f_dist(u), pctrl);
+      seq<conn> conn_u = algo::prune_heuristic(std::move(res), get_deg_bound(), gen_f_nbhs(g),
+                                               gen_f_dist(u), pctrl);
       // record the edge for the backward insertion later
       auto &edge_cur = edge_added[i];
       edge_cur.clear();
@@ -442,7 +458,8 @@ namespace ANN {
       auto edge_agent_v = g.get_edges(v);
       // std::cerr << "Before: " << edge_agent_v.size() << '\n';
       auto edge_v = util::to<seq<edge>>(std::move(edge_agent_v));
-      edge_v.insert(edge_v.end(), std::make_move_iterator(nbh_v_add.begin()), std::make_move_iterator(nbh_v_add.end()));
+      edge_v.insert(edge_v.end(), std::make_move_iterator(nbh_v_add.begin()),
+                    std::make_move_iterator(nbh_v_add.end()));
 
       seq<conn> conn_v = algo::prune_simple(conn_cast(std::move(edge_v)), get_deg_bound());
       edge_agent_v = edge_cast(conn_v);
@@ -460,7 +477,8 @@ namespace ANN {
 
   template<class Desc>
   template<typename Iter>
-  void vamana<Desc>::insert_batch_impl(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F) {
+  void vamana<Desc>::insert_batch_impl(Iter begin, Iter end,
+                                       const std::vector<std::vector<label_t>> &F) {
     const size_t size_batch = std::distance(begin, end);
     seq<nid_t> nids(size_batch);
 
@@ -496,11 +514,13 @@ namespace ANN {
       auto &eps_u = entrance;
       search_control sctrl;  // TODO: use designated initializers in C++20
       sctrl.log_per_stat = i;
-      seq<conn> res = algo::beamSearch(gen_f_nbhs(g), gen_f_dist(u), get_f_label(g), eps_u, L, F[i], sctrl);
+      seq<conn> res =
+          algo::beamSearch(gen_f_nbhs(g), gen_f_dist(u), get_f_label(g), eps_u, L, F[i], sctrl);
 
       prune_control pctrl;  // TODO: use designated intializers in C++20
       pctrl.alpha = alpha;
-      seq<conn> conn_u = algo::prune_heuristic(std::move(res), get_deg_bound(), gen_f_nbhs(g), gen_f_dist(u), pctrl);
+      seq<conn> conn_u = algo::prune_heuristic(std::move(res), get_deg_bound(), gen_f_nbhs(g),
+                                               gen_f_dist(u), pctrl);
       // record the edge for the backward insertion later
       auto &edge_cur = edge_added[i];
       edge_cur.clear();
@@ -529,7 +549,8 @@ namespace ANN {
 
       auto edge_agent_v = g.get_edges(v);
       auto edge_v = util::to<seq<edge>>(std::move(edge_agent_v));
-      edge_v.insert(edge_v.end(), std::make_move_iterator(nbh_v_add.begin()), std::make_move_iterator(nbh_v_add.end()));
+      edge_v.insert(edge_v.end(), std::make_move_iterator(nbh_v_add.begin()),
+                    std::make_move_iterator(nbh_v_add.end()));
 
       seq<conn> conn_v = algo::prune_simple(conn_cast(std::move(edge_v)), get_deg_bound());
       edge_agent_v = edge_cast(conn_v);
@@ -545,7 +566,8 @@ namespace ANN {
 
   template<class Desc>
   template<class Seq>
-  Seq vamana<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef, const search_control &ctrl) const {
+  Seq vamana<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef,
+                           const search_control &ctrl) const {
     seq<nid_t> eps = entrance;
     auto nbhs = beamSearch(gen_f_nbhs(g), gen_f_dist(cq), eps, ef, ctrl);
 
@@ -565,8 +587,8 @@ namespace ANN {
 
   template<class Desc>
   template<class Seq>
-  Seq vamana<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef, const std::vector<label_t> &F,
-                           const search_control &ctrl) const {
+  Seq vamana<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef,
+                           const std::vector<label_t> &F, const search_control &ctrl) const {
     seq<nid_t> eps = entrance;
     // auto nbhs = beamSearch(gen_f_nbhs(g), gen_f_dist(cq), eps, ef, ctrl);
     auto nbhs = beamSearch(gen_f_nbhs(g), gen_f_dist(cq), get_f_label(g), eps, ef, F, ctrl);

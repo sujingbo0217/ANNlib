@@ -1,28 +1,32 @@
+#include <parlay/parallel.h>
+#include <parlay/primitives.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstdint>
-#include <algorithm>
-#include <numeric>
-#include <random>
-#include <string>
-#include <sstream>
 #include <iterator>
-#include <vector>
-#include <queue>
 #include <map>
-#include <unordered_set>
-#include <unordered_map>
-#include <chrono>
+#include <numeric>
+#include <queue>
+#include <random>
+#include <sstream>
 #include <stdexcept>
-#include "parse_points.hpp"
-#include "graph/adj.hpp"
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
 #include "algo/algo.hpp"
 #include "algo/vamana.hpp"
-#include "util/intrin.hpp"
-#include "dist.hpp"
-#include "parlay.hpp"
 #include "benchUtils.h"
-#include "cpam.hpp"
+// #include "cpam.hpp"
+#include "dist.hpp"
+#include "graph/adj.hpp"
+#include "parlay.hpp"
+#include "parse_points.hpp"
+#include "util/intrin.hpp"
 
 using ANN::vamana;
 
@@ -77,14 +81,14 @@ struct desc {
   using graph_aux = ANN::graph::adj_map<Nid, Ext, Edge>;
 };
 
-template<class DescLegacy>
-struct desc_cpam : desc<DescLegacy> {
-  template<typename Nid, class Ext, class Edge = Nid>
-  using graph_t = graph_cpam<Nid, Ext, Edge>;
+// template<class DescLegacy>
+// struct desc_cpam : desc<DescLegacy> {
+//   template<typename Nid, class Ext, class Edge = Nid>
+//   using graph_t = graph_cpam<Nid, Ext, Edge>;
 
-  template<typename Nid, class Ext, class Edge = Nid>
-  using graph_aux = graph_cpam<Nid, Ext, Edge>;
-};
+//   template<typename Nid, class Ext, class Edge = Nid>
+//   using graph_aux = graph_cpam<Nid, Ext, Edge>;
+// };
 
 // Visit all the vectors in the given 2D array of points
 // This triggers the page fetching if the vectors are mmap-ed
@@ -263,7 +267,8 @@ auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef) {
 }
 
 template<class G, class Seq, typename L>
-auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef, const std::vector<std::vector<L>> &F) {
+auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef,
+               const std::vector<std::vector<L>> &F) {
   const size_t cnt_query = q.size();
   per_visited.resize(cnt_query);
   per_eval.resize(cnt_query);
@@ -343,7 +348,8 @@ auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k) 
 
 template<class U, class Seq, class Point, typename L>
 auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k,
-                     const std::vector<std::vector<L>> &base_labels, const std::vector<L> &query_label) {
+                     const std::vector<std::vector<L>> &base_labels,
+                     const std::vector<L> &query_label) {
   static_assert(std::is_same_v<Point, typename U::point_t>);
   assert(data.size() == base_labels.size());
 
@@ -354,8 +360,8 @@ auto CalculateOneKnn(const Seq &data, const Point &q, uint32_t dim, uint32_t k,
   for (size_t i = 0; i < data.size(); ++i) {
     const auto &u = data[i];  // id, point
     std::vector<L> inter;
-    std::set_intersection(base_labels[i].begin(), base_labels[i].end(), query_label.begin(), query_label.end(),
-                          std::back_inserter(inter));
+    std::set_intersection(base_labels[i].begin(), base_labels[i].end(), query_label.begin(),
+                          query_label.end(), std::back_inserter(inter));
 
     if (inter.size() == 0) continue;
     float dist = U::distance(u.second.get_coord(), q.get_coord(), dim);
@@ -383,17 +389,20 @@ template<class U, class S1, class S2>
 auto ConstructKnng(const S1 &data, const S2 &qs, uint32_t dim, uint32_t k) {
   using pid_t = typename U::point_t::id_t;
   parlay::sequence<parlay::sequence<pid_t>> res(qs.size());
-  parlay::parallel_for(0, qs.size(), [&](size_t i) { res[i] = CalculateOneKnn<U>(data, qs[i], dim, k); });
+  parlay::parallel_for(0, qs.size(),
+                       [&](size_t i) { res[i] = CalculateOneKnn<U>(data, qs[i], dim, k); });
   return res;
 }
 
 template<class U, class S1, class S2, typename L>
 auto ConstructKnng(const S1 &data, const S2 &qs, uint32_t dim, uint32_t k,
-                   const std::vector<std::vector<L>> &base_labels, const std::vector<std::vector<L>> &query_labels) {
+                   const std::vector<std::vector<L>> &base_labels,
+                   const std::vector<std::vector<L>> &query_labels) {
   using pid_t = typename U::point_t::id_t;
   parlay::sequence<parlay::sequence<pid_t>> res(qs.size());
-  parlay::parallel_for(
-      0, qs.size(), [&](size_t i) { res[i] = CalculateOneKnn<U>(data, qs[i], dim, k, base_labels, query_labels[i]); });
+  parlay::parallel_for(0, qs.size(), [&](size_t i) {
+    res[i] = CalculateOneKnn<U>(data, qs[i], dim, k, base_labels, query_labels[i]);
+  });
   return res;
 }
 
@@ -407,7 +416,8 @@ void calc_recall(const S1 &q, const S2 &res, const S3 &gt, uint32_t k) {
     uint32_t cnt_shot = 0;
     for (uint32_t j = 0; j < k; ++j) {
       // std::cout << res[i][j].pid << ", " << gt[i][j] << '\n';
-      if (std::find_if(res[i].begin(), res[i].end(), [&](const auto &p) { return p.pid == gt[i][j]; }) !=
+      if (std::find_if(res[i].begin(), res[i].end(),
+                       [&](const auto &p) { return p.pid == gt[i][j]; }) !=
           res[i].end())  // TODO: fix naming
       {
         cnt_shot++;
@@ -476,8 +486,8 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   // std::vector<vamana<U>> snapshots;
   puts("Initialize base vamana");
 
-  auto Merge = [](vamana<U> from, vamana<U> &to) {
-    from.g.iter_each_nid([&](typename vamana<U>::nid_t nid) {
+  auto Merge = [alpha](vamana<U> from, vamana<U> &to) {
+    from.g.for_each_nid([&](typename vamana<U>::nid_t nid) {
       // for (typename vamana<U>::nid_t nid : from.existed_points) {
       // std::cerr << "nid: " << nid << '\n';
       if (to.is_node_existed(nid)) {
@@ -488,8 +498,13 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
                       std::make_move_iterator(new_edges.end()));
         // std::cerr << "Exist edge total after: " << edge_v.size() << '\n';
         // edge_v.insert(edge_v.end(), new_edges.begin(), new_edges.end());
+        // typename vamana<U>::seq_conn conn_v = ANN::algo::prune_simple(
+        //     to.conn_cast(std::move(edge_v)), to.get_deg_bound());
+        typename vamana<U>::prune_control pctrl;
+        pctrl.alpha = alpha;
         typename vamana<U>::seq_conn conn_v =
-            ANN::algo::prune_simple(to.conn_cast(std::move(edge_v)), to.get_deg_bound());
+            ANN::algo::prune_heuristic(to.conn_cast(std::move(edge_v)), to.get_deg_bound(),
+                                       to.gen_f_nbhs(to.g), to.gen_f_dist(nid), pctrl);
         new_edges = to.edge_cast(std::move(conn_v));
         to.g.set_edges(nid, std::move(new_edges));
       } else {
@@ -511,7 +526,7 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
 
   size_t idx = 0;
   for (const auto &[f, Pf] : P) {
-    std::cerr << f << " " << Pf.size() << '\n';
+    // std::cerr << f << " " << Pf.size() << '\n';
     // parlay::sequence<typename decltype(ps)::value_type> new_ps(Pf.size());
     parlay::sequence<std::pair<L, typename decltype(ps)::value_type>> new_ps(Pf.size());
     std::vector<std::vector<L>> base_labels(Pf.size());
@@ -522,8 +537,8 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
       base_labels[i] = F_b[Pf[i]];
     });
 
-    // for(size_t size_last=0, size_curr=size_init; size_curr<=std::min<size_t>(size_max, new_ps.size());
-    // size_last=size_curr, size_curr+=size_step)
+    // for(size_t size_last=0, size_curr=size_init; size_curr<=std::min<size_t>(size_max,
+    // new_ps.size()); size_last=size_curr, size_curr+=size_step)
     // {
     // printf("Increasing size from %lu to %lu\n", size_last, size_curr);
 
@@ -556,8 +571,8 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
 
     // snapshots.push_back(g);
 
-    // puts("Collect statistics");
-    // print_stat(base);
+    puts("Collect statistics");
+    print_stat(base);
 
     // puts("Search for neighbors");
     // auto res = find_nbhs(base, q, k, ef, F_q);
@@ -591,7 +606,8 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   // auto gt = ConstructKnng<U>(baseset, q, dim, k, label_slice, F_q);
 
   parlay::sequence<std::pair<L, typename decltype(ps)::value_type>> new_ps(ps.size());
-  parlay::parallel_for(0, ps.size(), [&](size_t i) { new_ps[i] = std::make_pair(i, *(ps.begin() + i)); });
+  parlay::parallel_for(0, ps.size(),
+                       [&](size_t i) { new_ps[i] = std::make_pair(i, *(ps.begin() + i)); });
   assert(new_ps.size() == F_b.size());
   auto gt = ConstructKnng<U>(new_ps, q, dim, k, F_b, F_q);
 

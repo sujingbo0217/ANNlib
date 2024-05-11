@@ -4,11 +4,13 @@
 #include <type_traits>
 
 #include "NSGDist.h"
+#include "parse_points.hpp"
 
 template<typename T>
 class descr_ang {
-  using promoted_type = std::conditional_t<std::is_integral_v<T> && sizeof(T) <= 4,
-                                           std::conditional_t<sizeof(T) == 4, int64_t, int32_t>, float>;
+  using promoted_type =
+      std::conditional_t<std::is_integral_v<T> && sizeof(T) <= 4,
+                         std::conditional_t<sizeof(T) == 4, int64_t, int32_t>, float>;
 
  public:
   typedef T type_elem;
@@ -31,8 +33,9 @@ class descr_ang {
 
 template<typename T>
 class descr_ndot {
-  using promoted_type = std::conditional_t<std::is_integral_v<T> && sizeof(T) <= 4,
-                                           std::conditional_t<sizeof(T) == 4, int64_t, int32_t>, float>;
+  using promoted_type =
+      std::conditional_t<std::is_integral_v<T> && sizeof(T) <= 4,
+                         std::conditional_t<sizeof(T) == 4, int64_t, int32_t>, float>;
 
  public:
   typedef T type_elem;
@@ -51,8 +54,9 @@ class descr_ndot {
 
 template<typename T>
 class descr_l2 {
-  using promoted_type = std::conditional_t<std::is_integral_v<T> && sizeof(T) <= 4,
-                                           std::conditional_t<sizeof(T) == 4, int64_t, int32_t>, float>;
+  using promoted_type =
+      std::conditional_t<std::is_integral_v<T> && sizeof(T) <= 4,
+                         std::conditional_t<sizeof(T) == 4, int64_t, int32_t>, float>;
 
  public:
   typedef T type_elem;

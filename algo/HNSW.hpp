@@ -150,7 +150,8 @@ namespace ANN {
     void insert_batch_impl(Iter begin, Iter end);
 
     template<class Seq = seq<nid_t>>
-    Seq search_layer_to(const coord_t &cq, uint32_t ef, uint32_t l_stop, const search_control &ctrl = {}) const;
+    Seq search_layer_to(const coord_t &cq, uint32_t ef, uint32_t l_stop,
+                        const search_control &ctrl = {}) const;
 
     uint32_t get_deg_bound(uint32_t level) const {
       return level == 0 ? m * 2 : m;
@@ -163,7 +164,8 @@ namespace ANN {
       // static thread_local std::hash<std::thread::id> h;
       // static thread_local std::mt19937 gen{h(std::this_thread::get_id())};
       static thread_local std::mt19937 gen{cm::worker_id()};
-      static thread_local std::uniform_real_distribution<> dis(std::numeric_limits<float>::min(), 1.0);
+      static thread_local std::uniform_real_distribution<> dis(std::numeric_limits<float>::min(),
+                                                               1.0);
       const uint32_t res = uint32_t(-log(dis(gen)) * m_l);
       return res;
     }
@@ -180,7 +182,8 @@ namespace ANN {
           return Desc::distance(c, g.get().get_node(v)->get_coord(), dim);
         }
         dist_t operator()(nid_t u, nid_t v) const {
-          return Desc::distance(g.get().get_node(u)->get_coord(), g.get().get_node(v)->get_coord(), dim);
+          return Desc::distance(g.get().get_node(u)->get_coord(), g.get().get_node(v)->get_coord(),
+                                dim);
         }
       };
 
@@ -277,15 +280,16 @@ namespace ANN {
   template<typename Iter>
   void HNSW<Desc>::insert(Iter begin, Iter end, float batch_base) {
     static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
-    static_assert(
-        std::is_base_of_v<std::random_access_iterator_tag, typename std::iterator_traits<Iter>::iterator_category>);
+    static_assert(std::is_base_of_v<std::random_access_iterator_tag,
+                                    typename std::iterator_traits<Iter>::iterator_category>);
 
     const size_t n = std::distance(begin, end);
     if (n == 0) return;
 
     // std::random_device rd;
     auto perm = cm::random_permutation(n /*, rd()*/);
-    auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + perm[i]); });
+    auto rand_seq =
+        util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + perm[i]); });
 
     size_t cnt_skip = 0;
     if (layer_b.empty()) {
@@ -304,7 +308,8 @@ namespace ANN {
     float progress = 0.0;
     while (batch_end < n) {
       batch_begin = batch_end;
-      batch_end = std::min({n, (size_t)std::ceil(batch_begin * batch_base) + 1, batch_begin + size_limit});
+      batch_end =
+          std::min({n, (size_t)std::ceil(batch_begin * batch_base) + 1, batch_begin + size_limit});
 
       util::debug_output("Batch insertion: [%u, %u)\n", batch_begin, batch_end);
       insert_batch_impl(rand_seq.begin() + batch_begin, rand_seq.begin() + batch_end);
@@ -359,11 +364,13 @@ namespace ANN {
     // which is equivalent to grouping nodes by level
     // since the order of points does not matter
     cm::sort(level.begin(), level.end(), std::greater<uint32_t>{});
-    auto pos_split =
-        util::pack_index(util::delayed_seq(size_batch, [&](size_t i) { return i == 0 || level[i - 1] != level[i]; }));
+    auto pos_split = util::pack_index(util::delayed_seq(
+        size_batch, [&](size_t i) { return i == 0 || level[i - 1] != level[i]; }));
 
     // with the level info, query the nearest nbhs as entry points for each node
-    cm::parallel_for(0, size_batch, [&](size_t i) { eps[i] = search_layer_to((begin + i)->get_coord(), 1, level[i]); });
+    cm::parallel_for(0, size_batch, [&](size_t i) {
+      eps[i] = search_layer_to((begin + i)->get_coord(), 1, level[i]);
+    });
     util::debug_output("Finish searching entrances\n");
 
     // next, add the nodes themselves into the graphs
@@ -372,8 +379,10 @@ namespace ANN {
     if (level_max > level_ep) layer_u.resize(level_max + 1);
 
     auto add_to_upper = [&](uint32_t l, size_t pos_end) {
-      util::debug_output("== insert [%u, %u) to layer[%u]\n", begin->get_id(), (begin + pos_end)->get_id(), l);
-      layer_u[l].add_nodes(util::delayed_seq(pos_end, [&](size_t i) { return std::pair{nids[i], node_lite{}}; }));
+      util::debug_output("== insert [%u, %u) to layer[%u]\n", begin->get_id(),
+                         (begin + pos_end)->get_id(), l);
+      layer_u[l].add_nodes(
+          util::delayed_seq(pos_end, [&](size_t i) { return std::pair{nids[i], node_lite{}}; }));
     };
     // note the end of range where level==0 is not yet in `pos_split'
     // so any level[pos_split[j]] must be valid
@@ -434,7 +443,8 @@ namespace ANN {
         auto prune = [&](const auto &g) -> decltype(auto) {
           prune_control ctrl;  // TODO: use designated intializers in C++20
           ctrl.alpha = alpha;
-          return algo::prune_heuristic(std::move(res), get_deg_bound(l), gen_f_nbhs(g), gen_f_dist(u), ctrl);
+          return algo::prune_heuristic(std::move(res), get_deg_bound(l), gen_f_nbhs(g),
+                                       gen_f_dist(u), ctrl);
         };
         seq<conn> conn_u = l == 0 ? prune(layer_b) : prune(layer_u[l]);
         // record the edge for the backward insertion later
@@ -492,7 +502,8 @@ namespace ANN {
 
   template<class Desc>
   template<class Seq>
-  Seq HNSW<Desc>::search_layer_to(const coord_t &cq, uint32_t ef, uint32_t l_stop, const search_control &ctrl) const {
+  Seq HNSW<Desc>::search_layer_to(const coord_t &cq, uint32_t ef, uint32_t l_stop,
+                                  const search_control &ctrl) const {
     auto eps = entrance;
     for (uint32_t l = layer_b.get_node(eps[0])->level; l > l_stop; --l) {
       search_control c{};
@@ -514,7 +525,8 @@ namespace ANN {
 
   template<class Desc>
   template<class Seq>
-  Seq HNSW<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef, const search_control &ctrl) const {
+  Seq HNSW<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef,
+                         const search_control &ctrl) const {
     /*
     const auto wid = cm::worker_id();
     total_range_candidate[wid] = 0;

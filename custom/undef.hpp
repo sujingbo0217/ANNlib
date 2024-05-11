@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <execution>
+// #include <execution>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -30,11 +30,13 @@ namespace ANN::external {
     using seq = std::vector<T>;
 
     template<typename F>
-    static void parallel_for(size_t start, size_t end, F f, long granularity = 0, bool conservative = false) {
+    static void parallel_for(size_t start, size_t end, F f, long granularity = 0,
+                             bool conservative = false) {
       (void)granularity, (void)conservative;
 
       util::delayed_seq a(end - start, [=](size_t i) { return i + start; });
-      std::for_each(std::execution::par, a.begin(), a.end(), f);
+      // std::for_each(std::execution::par, a.begin(), a.end(), f);
+      std::for_each(a.begin(), a.end(), f);
     }
 
     static uint64_t hash64(uint64_t x) {
