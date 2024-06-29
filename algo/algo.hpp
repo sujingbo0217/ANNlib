@@ -164,7 +164,7 @@ namespace ANN {
           std::vector<label_t> P = f_label(pv);
           std::vector<label_t> inter;
           std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
-          if (inter.size() != 0) {
+          if (inter.size() > 0) {
             cand.insert({d, pv});
             workset.push_back({d, pv});
             std::push_heap(workset.begin(), workset.end());

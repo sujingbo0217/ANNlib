@@ -470,5 +470,7 @@ class OpenAIEmbedding1M(DatasetCompetitionFormat):
 ds = YFCC100MDataset()
 ds.prepare()
 
-data = ds.get_dataset()
-print(data)
+print(f"Base data shape: {ds.get_dataset().shape}")
+print(f"Base label shape: {ds.get_dataset_metadata().shape}")
+print(f"Query data shape: {ds.get_queries().shape}")
+print(f"Query label shape: {ds.get_queries_metadata().shape}")

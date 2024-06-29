@@ -269,9 +269,10 @@ namespace ANN {
     if (n == 0) return;
 
     // std::random_device rd;
-    auto perm = cm::random_permutation(n /*, rd()*/);
-    auto rand_seq =
-        util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + perm[i]); });
+    // auto perm = cm::random_permutation(n /*, rd()*/);
+    // auto rand_seq =
+    //     util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + perm[i]); });
+    auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + i); });
 
     size_t cnt_skip = 0;
     if (g.empty()) {
@@ -327,11 +328,12 @@ namespace ANN {
     auto perm = cm::random_permutation(n /*, rd()*/);
     auto rand_seq =
         util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(begin + perm[i]); });
-    auto rand_label_seq =
-        util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(F.begin() + perm[i]); });
+    // auto rand_label_seq =
+    //     util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(F.begin() + perm[i]); });
 
     for (auto it = begin; it != end; it++) {
-      set_point(it->first);
+      // set_point(it->first);
+      set_point(it->second.get_id());
     }
 
     // std::cerr << "total nodes now: " << existed_points.size() << '\n';
@@ -340,8 +342,10 @@ namespace ANN {
     if (g.empty()) {
       // const nid_t ep_init = id_map.insert(rand_seq.begin()->get_id());
       auto it = rand_seq.begin();
-      const nid_t ep_init = id_map.insert(static_cast<pid_t>(it->first));
+      const nid_t ep_init = id_map.insert(static_cast<pid_t>(it->second.get_id()));
       g.add_node(ep_init, node_t{it->second.get_coord(), *(F.begin())});
+      // const nid_t ep_init = id_map.insert(static_cast<pid_t>(it->get_id()));
+      // g.add_node(ep_init, node_t{it->get_coord(), *(F.begin())});
       entrance.push_back(ep_init);
       // additional entry point
       // it++;
@@ -490,18 +494,19 @@ namespace ANN {
     // `nids[i]` is the nid of the node corresponding to the i-th
     // point to insert in the batch, associated with level[i]
     id_map.insert(util::delayed_seq(size_batch, [&](size_t i) {
-      // return (begin+i)->get_id();
-      return (begin + i)->first;
+      // return (begin + i)->first;
+      return (begin + i)->second.get_id();
     }));
 
     cm::parallel_for(0, size_batch, [&](uint32_t i) {
-      // nids[i] = id_map.get_nid((begin+i)->get_id());
-      nids[i] = id_map.get_nid((begin + i)->first);
+      // nids[i] = id_map.get_nid((begin + i)->first);
+      nids[i] = id_map.get_nid((begin + i)->second.get_id());
     });
 
     g.add_nodes(util::delayed_seq(size_batch, [&](size_t i) {
       // GUARANTEE: begin[*].get_coord is only invoked for assignment once
       return std::pair{nids[i], node_t{(begin + i)->second.get_coord(), *(F.begin() + i)}};
+      // return std::pair{nids[i], node_t{(begin + i)->get_coord(), *(F.begin() + i)}};
     }));
 
     // below we (re)generate edges incident to nodes in the current batch

@@ -9,6 +9,7 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <chrono>
 
 struct commandLine {
   int argc;
@@ -189,11 +190,37 @@ int main(int argc, char** argv) {
       ZipfDistribution zipf(num_points, num_labels);
       zipf.writeDistribution(outfile);
     } else if (distribution_type == "random") {
+      // std::random_device rd;
+      // std::mt19937 gen(rd());
+      // std::uniform_int_distribution<> large(10, 20);
+      // std::uniform_int_distribution<> small(1, 2);
+      // std::mt19937 rng((unsigned int) std::chrono::steady_clock::now().time_since_epoch().count());
       for (size_t i = 0; i < num_points; i++) {
         bool label_written = false;
+      //   // auto rand_frac = dis(gen);
+      //   if (rand() < (RAND_MAX / 8)) {
+      //     size_t len = large(gen);
+      //     size_t begin = std::max<size_t>(1, rng() % (num_labels - len + 1));
+      //     for (size_t j = 0; j < len; j++) {
+      //       if (label_written) {
+      //         outfile << ',';
+      //       }
+      //       outfile << begin + j;
+      //       label_written = true;
+      //     }
+      //   } else {
+      //     size_t len = small(gen);
+      //     size_t begin = std::max<size_t>(1, rng() % (num_labels - len));
+      //     for (size_t j = 0; j < len; j++) {
+      //       if (label_written) {
+      //         outfile << ',';
+      //       }
+      //       outfile << begin + j;
+      //       label_written = true;
+      //     }
+      //   }
         for (size_t j = 1; j <= num_labels; j++) {
-          // 50% chance to assign each label
-          if (rand() > (RAND_MAX / 2)) {
+          if (rand() < (RAND_MAX / 2)) {
             if (label_written) {
               outfile << ',';
             }
@@ -211,7 +238,7 @@ int main(int argc, char** argv) {
     } else if (distribution_type == "one_per_point") {
       std::random_device rd;                                 // obtain a random number from hardware
       std::mt19937 gen(rd());                                // seed the generator
-      std::uniform_int_distribution<> distr(0, num_labels);  // define the range
+      std::uniform_int_distribution<> distr(1, num_labels);  // define the range
 
       for (size_t i = 0; i < num_points; i++) {
         outfile << distr(gen);
