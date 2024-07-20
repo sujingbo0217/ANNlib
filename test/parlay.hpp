@@ -1,6 +1,9 @@
 #ifndef _ANN_TEST_PARLAY_HPP
 #define _ANN_TEST_PARLAY_HPP
 
+#include <utility>
+#include <ranges>
+#include "custom/undef.hpp"
 #include <parlay/parallel.h>
 #include <parlay/primitives.h>
 
@@ -53,13 +56,15 @@ namespace ANN::external {
         parlay::sort_inplace(parlay::make_slice(begin, end), comp);
     }
 
-    template<class R,  // TODO: shorten
-             class T = std::remove_reference_t<typename std::remove_reference_t<R>::value_type>,
-             class BinaryOp = std::plus<>>
-    static auto reduce(R &&range, T init = {}, BinaryOp op = {}) {
-      return parlay::reduce(std::forward<R>(range),
-                            parlay::binary_op(std::move(op), std::move(init)));
-    }
+	template<class R, // TODO: shorten
+		class T=std::remove_reference_t<std::ranges::range_value_t<typename std::remove_reference_t<R>>>,
+		class BinaryOp=std::plus<>>
+	static auto reduce(R &&range, T init={}, BinaryOp op={})
+	{
+		return parlay::reduce(std::forward<R>(range),
+			parlay::binary_op(std::move(op),std::move(init))
+		);
+	}
 
     template<typename Iter,
              class T = std::remove_reference_t<typename std::iterator_traits<Iter>::value_type>,
@@ -95,10 +100,17 @@ namespace ANN::external {
       return parlay::flatten(std::forward<Seq>(seq));
     }
 
-    template<class Seq>
-    static auto group_by_key(Seq &&seq) {
-      return parlay::group_by_key(std::forward<Seq>(seq));
-    }
+	template<class Seq>
+	static auto group_by_key(Seq &&seq)
+	{
+		return parlay::group_by_key(std::forward<Seq>(seq));
+	}
+
+	template<typename Seq, class F, class L=lookup_custom_tag<>>
+	static auto filter(Seq &&seq, F &&f)
+	{
+		return parlay::filter(std::forward<Seq>(seq), std::forward<F>(f));
+	}
 
     template<typename Iter>
     static Iter max_element(Iter begin, Iter end) {

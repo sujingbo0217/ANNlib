@@ -15,21 +15,22 @@
 #include "cpam/cpam.h"
 #include "custom/custom.hpp"
 #include "pam/pam.h"
-#include "util/iter.hpp"
-#include "util/seq.hpp"  // TODO: remove once switch to C++20
-#include "util/util.hpp"
-
-struct inner_t {};
+#include "cpam/cpam.h"
 
 // Wrap a (fancy) pointer type UPtr to meet the requirements of A::pointer
 // where A is an Allocator following the C++ named requirements
 template<class UPtr>
-class ptr_adapter
-    : public UPtr,
-      public ANN::util::enable_rand_iter<ptr_adapter<UPtr>, size_t, ANN::util::empty> {
-  using base_ptr = UPtr;
-  using base_iter = ANN::util::enable_rand_iter<ptr_adapter<UPtr>, size_t, ANN::util::empty>;
-  using T = typename UPtr::element_type;
+class ptr_adapter : 
+	public UPtr,
+	public ANN::util::enable_rand_iter<
+		ptr_adapter<UPtr>, size_t, ANN::util::empty>
+{
+	using base_ptr = UPtr;
+	using base_iter = ANN::util::enable_rand_iter<
+		ptr_adapter<UPtr>, size_t, ANN::util::empty
+	>;
+	using T = typename UPtr::element_type;
+	using inner_t = ANN::util::inner_t;
 
  public:
   typedef T value_type;
@@ -112,12 +113,14 @@ class shared_allocator : public Alloc {
   using const_pointer = ptr_adapter<std::shared_ptr<const val_t>>;
   using Alloc::Alloc;
 
-  template<typename... Args>
-  pointer allocate(sz_t n, Args... args) {
-    return pointer(
-        Alloc::allocate(n, std::forward<Args>(args)...),
-        [=](auto *p) { this->Alloc::deallocate(p, n); }, base());
-  }
+	template<typename ...Args>
+	pointer allocate(sz_t n, Args ...args){
+		return pointer(
+			Alloc::allocate(n, std::forward<Args>(args)...),
+			[&](auto *p){this->Alloc::deallocate(p,n);},
+			base()
+		);
+	}
 
   void deallocate(pointer &p, sz_t /*n*/) {
     p.reset();

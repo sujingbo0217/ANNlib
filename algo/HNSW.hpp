@@ -137,7 +137,7 @@ namespace ANN {
     std::vector<graph_lite> layer_u;
     // graph::adj_seq<nid_t,node_fat> layer_b;
     graph_fat layer_b;
-    map::direct<pid_t, nid_t> id_map;
+    map::trivial<pid_t, nid_t> id_map;
 
     seq<nid_t> entrance;  // To init
     uint32_t dim;

@@ -1,6 +1,7 @@
 #ifndef _ANN_GRAPH_HPP
 #define _ANN_GRAPH_HPP
 
+#include <cstdint>
 #include <type_traits>
 
 #include "ANN.hpp"
@@ -8,27 +9,30 @@
 namespace ANN {
   namespace graph {
 
-    class base {
-      struct node;
-
-     public:
-      using nid_t = uint32_t;
-      struct node_ptr;
-      struct node_cptr;
-      // TODO: update interfaces
-      node_ptr get_node(nid_t);
-      node_cptr get_node(nid_t) const;
-      template<class Seq>
-      Seq get_edges(node_cptr) const;
-      template<class Seq>
-      Seq get_edges(nid_t) const;
-      template<class Seq>
-      void set_edges(nid_t, Seq &&);
-      void add_node(nid_t);
-      template<class Seq>
-      void add_nodes(Seq &&);
-      size_t num_nodes() const;
-    };
+class base
+{
+	struct node;
+public:
+	using nid_t = uint32_t;
+	struct node_ptr;
+	struct node_cptr;
+	// TODO: update interfaces
+	node_ptr get_node(nid_t);
+	node_cptr get_node(nid_t) const;
+	template<class Seq>
+	Seq get_edges(node_cptr) const;
+	template<class Seq>
+	Seq get_edges(nid_t) const;
+	template<class Seq>
+	void set_edges(nid_t, Seq&&);
+	void add_node(nid_t);
+	template<class Seq>
+	void add_nodes(Seq&&);
+	size_t num_nodes() const;
+	void remove_node(nid_t);
+	template<typename Iter>
+	void remove_nodes(Iter, Iter);
+};
 
     template<class>
     class shim;

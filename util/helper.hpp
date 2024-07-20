@@ -14,7 +14,7 @@ auto pack_index(Seq &&seq)
 	using cm = custom<typename L::type>;
 	// return cm::pack_index(std::forward<Seq>(seq));
 	// TODO: fix
-	return cm::pack_index(parlay::slice(seq.begin(),seq.end()));
+	return cm::pack_index(std::forward<Seq>(seq));
 }
 
 template<class Seq, class L=lookup_custom_tag<>>
@@ -29,6 +29,13 @@ auto group_by_key(Seq &&seq)
 {
 	using cm = custom<typename L::type>;
 	return cm::group_by_key(std::forward<Seq>(seq));
+}
+
+template<typename Seq, class F, class L=lookup_custom_tag<>>
+auto filter(Seq &&seq, F &&f)
+{
+	using cm = custom<typename L::type>;
+	return cm::filter(std::forward<Seq>(seq), std::forward<F>(f));
 }
 
 template<class SR, typename S1, typename S2>

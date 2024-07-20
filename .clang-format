@@ -1,0 +1,6 @@
+BasedOnStyle: Google
+ColumnLimit: 100
+NamespaceIndentation: All
+SpaceAfterTemplateKeyword: false
+AllowShortFunctionsOnASingleLine: Empty
+IndentExternBlock: AfterExternBlock

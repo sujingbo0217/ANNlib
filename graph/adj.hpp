@@ -279,6 +279,12 @@ namespace ANN::graph {
         add_nodes(ns.begin(), ns.end());
     }
 
+    template<class Iter>
+    void remove_nodes(Iter begin, Iter end) {
+      const auto n = std::distance(begin, end);
+      cm::parallel_for(0, n, [&](size_t i) { nodes[i] = typename decltype(nodes)::value_type{}; });
+    }
+
     template<class F>
     void iter_each(F &&f) const {
       for (const auto &u : nodes) f(gen_node_cptr(&u));
@@ -343,7 +349,6 @@ namespace ANN::graph {
     void add_nodes(Iter begin, Iter end) {
       // TODO: forward to `add_nodes(Seq&&)` using `subrange` in C++20
       nodes.insert(begin, end);
-      // std::cerr << "nodes size: " << nodes.size() << '\n';
     }
     template<class Seq>
     void add_nodes(Seq &&ns) {
@@ -352,6 +357,11 @@ namespace ANN::graph {
         add_nodes(std::make_move_iterator(ns.begin()), std::make_move_iterator(ns.end()));
       } else
         add_nodes(ns.begin(), ns.end());
+    }
+
+    template<class Iter>
+    void remove_nodes(Iter begin, Iter end) {
+      for (auto it = begin; it != end; ++it) nodes.erase(*it);
     }
 
     // TODO: eliminate redundant code by deducing 'this' in C++23

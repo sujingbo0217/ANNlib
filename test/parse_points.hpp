@@ -287,43 +287,74 @@ inline auto load_point(const char *input_name, Conv converter, size_t max_num = 
   throw std::invalid_argument("Unsupported input spec");
 }
 
-template<typename L>
-inline std::pair<std::vector<std::vector<uint32_t>>, std::unordered_map<L, std::vector<uint32_t>>>
+template<typename L, typename pid_t = uint32_t>
+inline std::pair<std::vector<std::vector<L>>, std::unordered_map<L, std::vector<pid_t>>>
 load_label(const char *file_path, size_t max_size = 0) {
   std::ifstream file(file_path);
   if (!file) {
     std::cerr << "Error: Unable to open file " << file_path << std::endl;
-    return {};
+    exit(-1);
   }
   std::string line;
   std::getline(file, line);
   std::istringstream num_points_iss(line);
+
   size_t num_points;
   num_points_iss >> num_points;
-  max_size = (max_size == 0 ? num_points : max_size);
+  num_points = (max_size == 0 ? num_points : max_size);
   // max_size = std::min<size_t>(max_size, num_points);
-  std::vector<std::vector<L>> F;
-  std::unordered_map<L, std::vector<uint32_t>> P;
-  // F.resize(max_size);
+
+  std::vector<std::vector<L>> F(num_points);
+  std::unordered_map<L, std::vector<pid_t>> P;
   size_t i = 0;
   size_t total_labels = 0;
-  while (std::getline(file, line)) {
+
+  while (i < num_points) {
+    std::getline(file, line);
     std::vector<L> node_labels;
     std::istringstream node_iss(line);
     L label;
     char comma;
     while (node_iss >> label) {
       node_labels.push_back(label);
-      P[label].push_back(static_cast<uint32_t>(i));
+      P[label].push_back(static_cast<pid_t>(i));
       node_iss >> comma;
     }
     std::sort(node_labels.begin(), node_labels.end());
-    F.push_back(node_labels);
+    // F.push_back(node_labels);
+    F[i] = node_labels;
     total_labels += node_labels.size();
     ++i;
   }
+
+  // std::sort(F.begin(), F.end(), [&](std::vector<L> a, std::vector<L> b) {
+  //   return a.size() > b.size();
+  // });
+  // size_t i = 0;
+  // for (const auto& labels : F) {
+  //   for (const L& label : labels) {
+  //     P[label].push_back(static_cast<pid_t>(i));
+  //   }
+  //   ++i;
+  // }
+
   std::cout << std::fixed << std::setprecision(2)
             << "Filters per Point: " << (float)total_labels / (float)num_points << std::endl;
+
+  std::vector<std::pair<L, std::vector<pid_t>>> pairs(P.begin(), P.end());
+
+  std::sort(
+      pairs.begin(), pairs.end(),
+      [&](const std::pair<L, std::vector<pid_t>> &a, const std::pair<L, std::vector<pid_t>> &b) {
+        return a.second.size() > b.second.size();
+      });
+  
+  P.clear();
+  // P = std::unordered_map<L, std::vector<pid_t>>(pairs.rbegin(), pairs.rend());
+  for (const auto &it : pairs) {
+    P.insert(it);
+  }
+
   file.close();
   return std::make_pair(F, P);
 }
