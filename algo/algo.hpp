@@ -37,7 +37,7 @@ struct prune_control{
 };
 
 template<class L=lookup_custom_tag<>, class E, class D, class Seq>
-auto beamSearch(
+auto beamSearch2(
 	E &&f_nbhs, D &&f_dist, const Seq &eps, uint32_t ef, const search_control &ctrl={})
 {
 	using cm = custom<typename L::type>;
@@ -49,7 +49,7 @@ auto beamSearch(
 	const uint32_t mask = (1u<<bits)-1;
 	typename cm::seq<nid_t> visited(mask+1, nid_invalid);
 	uint32_t cnt_visited = 0;
-	typename cm::seq<conn> workset;
+	typename cm::seq<conn> workset, chosen;
 	std::set<conn> cand; // TODO: test dual heaps
 	std::unordered_set<nid_t> is_inw; // TODO: test merge instead
 	// TODO: get statistics about the merged size
@@ -77,6 +77,7 @@ auto beamSearch(
 		if(++cnt_eval>limit_eval) break;
 
 		nid_t u = cand.begin()->u;
+		chosen.push_back(*cand.begin());
 		cand.erase(cand.begin());
 
 		util::iter_each(f_nbhs(u), [&](nid_t pv){
@@ -111,7 +112,110 @@ auto beamSearch(
 		per_size_C[qid] += cnt_eval;
 	}
 */
-	return workset;
+	return std::pair(workset,chosen);
+}
+
+template<class L=lookup_custom_tag<>, class E, class D, class Seq>
+auto beamSearch(
+	E &&f_nbhs, D &&f_dist, const Seq &eps, uint32_t ef, const search_control &ctrl={})
+{
+	using cm = custom<typename L::type>;
+	using nid_t = typename Seq::value_type;
+	using conn = util::conn<nid_t>;
+
+	const auto nid_invalid = std::numeric_limits<nid_t>::max();
+	const uint32_t bits = ef>2? std::ceil(std::log2(ef))*2-2: 2;
+	const uint32_t mask = (1u<<bits)-1;
+	typename cm::seq<nid_t> hash_filter(mask+1, nid_invalid);
+	auto is_seen = [&](nid_t u) -> bool{
+		const auto hu = cm::hash64(u)&mask;
+		if(hash_filter[hu]==u) return true;
+		hash_filter[hu] = u;
+		return false;
+	};
+
+	typename cm::seq<conn> frontier;
+	frontier.reserve(eps.size());
+	for(nid_t pe : eps)
+	{
+		hash_filter[cm::hash64(pe)&mask] = pe;
+		const auto d = f_dist(pe);
+		frontier.push_back({d,pe});
+	}
+	cm::sort(frontier.begin(), frontier.end());
+
+	typename cm::seq<conn> unvisited_frontier;
+	unvisited_frontier.push_back(frontier[0]);
+
+	typename cm::seq<conn> visited;
+	visited.reserve(2*ef);
+
+	size_t dist_cmps = eps.size();
+	uint32_t num_visited = 0;
+
+	typename cm::seq<conn> new_frontier, candidates;
+	typename cm::seq<nid_t> keep;
+	while(unvisited_frontier.size()>0)
+	{
+		const conn &curr = unvisited_frontier[0];
+		visited.insert(
+			std::upper_bound(visited.begin(),visited.end(),curr),
+			curr
+		);
+		num_visited++;
+
+		keep.clear();
+		util::iter_each(f_nbhs(curr.u), [&](nid_t v){
+			if(!is_seen(v))
+				keep.push_back(v);
+		});
+
+		candidates.clear();
+		for(nid_t v : keep)
+		{
+			const auto dv = f_dist(v);
+			dist_cmps++;
+			if(frontier.size()<ef || dv<frontier.back().d)
+				candidates.push_back({dv,v});
+		}
+		cm::sort(candidates.begin(), candidates.end());
+
+		size_t max_cap = frontier.size() + candidates.size();
+		if(new_frontier.size()<max_cap)
+			new_frontier.resize(max_cap);
+		auto new_frontier_size = std::set_union(
+			frontier.begin(), frontier.end(),
+			candidates.begin(), candidates.end(),
+			new_frontier.begin()
+		) - new_frontier.begin(); // TODO: early stop at size of ef
+
+		// new_frontier_size = std::min<size_t>(ef, new_frontier_size);
+		// if a k is given (i.e. k != 0) then trim off entries that have a
+		// distance greater than cut * curr-kth-smallest-distance.
+		// Only used during query and not during build.
+		/*
+		if(QP.k > 0 && new_frontier_size > QP.k)
+			new_frontier_size = std::upper_bound(
+				new_frontier.begin(), new_frontier.begin()+new_frontier_size,
+				std::pair{0, QP.cut * new_frontier[QP.k].second}
+			) - new_frontier.begin();
+		*/
+		new_frontier.resize(std::min<size_t>(new_frontier_size,ef));
+		frontier = std::move(new_frontier);
+		new_frontier.clear();
+
+		if(unvisited_frontier.size()<frontier.size())
+			unvisited_frontier.resize(frontier.size());
+		size_t num_remains = std::set_difference(
+			frontier.begin(), frontier.end(),
+			visited.begin(), visited.end(),
+			unvisited_frontier.begin()
+		) - unvisited_frontier.begin();
+
+		unvisited_frontier.resize(num_remains);
+	}
+	
+	return std::make_pair(frontier, visited);
 }
 
 namespace detail{
