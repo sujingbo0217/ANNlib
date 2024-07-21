@@ -46,6 +46,14 @@ public:
 		);
 	}
 
+	template<typename FL, typename FR>
+	static void par_do(FL &&fl, FR &&fr, bool conservative=false)
+	{
+		parlay::par_do(
+			std::forward<FL>(fl), std::forward<FR>(fr), conservative
+		);
+	}
+
 	static uint64_t hash64(uint64_t x)
 	{
 		return parlay::hash64_2(x);
@@ -126,6 +134,19 @@ public:
 	static Iter max_element(Iter begin, Iter end)
 	{
 		return parlay::max_element(parlay::make_slice(begin,end));
+	}
+
+	template<class Seq, class P>
+	static auto partition(Seq &seq, P &&pred)
+	{
+		auto r = std::ranges::ref_view(seq);
+		auto f = r | std::views::transform([&](const auto &e){
+			// parlay::split_two places elems with pred(.)==false first
+			return !pred(e);
+		});
+		auto [out, m] = parlay::internal::split_two(r, f);
+		parlay::copy(out, r);
+		return r.begin()+m;
 	}
 };
 

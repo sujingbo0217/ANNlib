@@ -12,6 +12,7 @@
 #include <ranges>
 #include <fstream>
 #include <string>
+#include <unordered_set>
 #include <unordered_map>
 #include <iterator>
 #include <type_traits>
@@ -80,13 +81,12 @@ public:
 		pid_t pid;
 	};
 	/*
-		Construct from the vectors [begin, end).
-		std::iterator_trait<Iter>::value_type ought to be convertible to T
+		Construction parameters
 		dim: 		vector dimension
 		R: 			max degree
 		L:			beam size during the construction
-		alpha:		parameter of the heuristic (similar to the one in vamana)
-		batch_base: growth rate of the batch size (discarded because of two passes)
+		alpha:		parameter of the heuristic pruning
+		batch_base: growth rate of the batch size
 	*/
 	vamana(uint32_t dim, uint32_t R=50, uint32_t L=75, float alpha=1.0);
 	/*
@@ -94,11 +94,66 @@ public:
 		getter(i) returns the actual data (convertible to type T) of the vector with id i
 	*/
 
+	/*
+		Insert the vectors from [begin, end).
+		std::iterator_trait<Iter>::value_type ought to be convertible to T
+	*/
 	template<typename Iter>
 	void insert(Iter begin, Iter end, float batch_base=2);
 
 	template<typename Iter>
 	void erase(Iter begin, Iter end);
+
+	void consolidate(){
+		using ea_t = std::remove_cvref_t<decltype(g.get_edges(nid_t()))>;
+		seq<seq<std::pair<nid_t,ea_t>>> ps(cm::num_workers());
+
+		g.for_each([&](auto p){
+			auto agent = g.get_edges(p);
+			auto to_nid = std::views::transform([&](const edge &e){return e.u;});
+			auto edges_rm = agent | 
+				std::views::filter([&](const edge &e){
+					return !id_map.contain_nid(e.u); //removed
+				}) | to_nid;
+			auto edges_alive = agent | 
+				std::views::filter([&](const edge &e){
+					return id_map.contain_nid(e.u); //alive
+				}) | to_nid;
+
+			std::unordered_set hash(edges_alive.begin(), edges_alive.end());
+			const coord_t &c = p->get_coord();
+			seq<conn> cand;
+			for(nid_t u : edges_rm)
+			{
+				auto it = relic.find(u);
+				if(it==relic.end()) continue;
+
+				auto edge_2hop = it->second | 
+					std::views::filter([&](const edge &e){
+						return id_map.contain_nid(e.u) && !hash.contains(e.u);
+					});
+				auto to_conn = std::views::transform([&](const edge &e){
+					dist_t d = Desc::distance(g.get_node(e.u)->get_coord(), c, dim);
+					return conn{d, e.u};
+				});	
+				auto conn_2hop = edge_2hop | to_conn;
+				cand.insert(cand.end(), conn_2hop.begin(), conn_2hop.end());
+				// TODO: use .insert_range in C++23
+				auto nbh_2hop = edge_2hop | to_nid;
+				hash.insert(nbh_2hop.begin(), nbh_2hop.end());
+			}
+
+			if(!cand.empty())
+			{
+				nid_t u = p.get_id();
+				agent = refine_edge(u, std::move(cand));
+				ps[cm::worker_id()].push_back({u, std::move(agent)});
+			}
+		});
+
+		g.set_edges(std::move(cm::flatten(ps)));
+		relic.clear();
+	}
 
 	template<class Seq=seq<result_t>>
 	Seq search(
@@ -155,6 +210,8 @@ private:
 	uint32_t L;
 	float alpha;
 
+	std::unordered_map<nid_t,seq<edge>> relic;
+
 	template<typename Iter>
 	void insert_batch_impl(Iter begin, Iter end);
 
@@ -208,12 +265,36 @@ private:
 		};
 	}
 
+	// TODO: solve the type of append
+	auto refine_edge(nid_t u, seq<conn> &&append){
+		auto agent = g.get_edges(u);
+		// TODO: consider moving the filter into conn_cast
+		// TODO: properly pass the move semantics
+		auto edges = util::to<seq<edge>>(
+			std::move(agent) |
+			std::views::filter([&](const edge &e){
+				return id_map.contain_nid(e.u);
+			})
+		);
+		edges.insert(edges.end(),
+			std::make_move_iterator(append.begin()),
+			std::make_move_iterator(append.end())
+		);
+
+		prune_control pctrl{.alpha=alpha};
+		seq<conn> conns = algo::prune_heuristic(
+			conn_cast(std::move(edges)), get_deg_bound(),
+			gen_f_nbhs(), gen_f_dist(u), pctrl
+		);
+		return edge_cast(std::move(conns));
+	}
+
 	template<class Op>
 	auto calc_degs(Op op) const{
 		seq<size_t> degs(cm::num_workers(), 0);
 		g.for_each([&](auto p){
 			auto &deg = degs[cm::worker_id()];
-			deg = op(deg, g.get_edges(p).size());
+			deg = op(deg, num_edges(p.get_id()));
 		});
 		return cm::reduce(degs, size_t(0), op);
 	}
@@ -224,7 +305,8 @@ public:
 	}
 
 	size_t num_edges(nid_t u) const{
-		return g.get_edges(u).size();
+		// return g.get_edges(u).size();
+		return std::ranges::distance(gen_f_nbhs()(u));
 	}
 	size_t num_edges() const{
 		return calc_degs(std::plus<>{});
@@ -234,6 +316,28 @@ public:
 		return calc_degs([](size_t x, size_t y){
 			return std::max(x, y);
 		});
+	}
+
+	void print_stat()
+	{
+		puts("#vertices         edges  avg. deg");
+		size_t cnt_vertex = num_nodes();
+		size_t cnt_degree = num_edges();
+		printf("%14lu %16lu %10.2f\n", 
+			cnt_vertex, cnt_degree, float(cnt_degree)/cnt_vertex
+		);
+
+		printf("ep: [%u]\n", ep);
+		printf("ep's nbhs:");
+		for(nid_t u : gen_f_nbhs()(ep))
+			printf(" %u", u);
+		putchar('\n');
+
+		auto t = std::views::transform([&](const edge &e){return e.u;});
+		printf("ep's all nbhs:");
+		for(nid_t u : g.get_edges(ep)|t)
+			printf(" %u", u);
+		putchar('\n');
 	}
 };
 
@@ -359,8 +463,8 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end)
 		const nid_t u = nids[i];
 
 		search_control sctrl; // TODO: use designated initializers in C++20
-		sctrl.log_per_stat = i;
-		seq<conn> res = algo::beamSearch(gen_f_nbhs(), gen_f_dist(u), seq<nid_t>{ep}, L, sctrl);
+		// sctrl.log_per_stat = i;
+		seq<conn> res = algo::beamSearch(gen_f_nbhs(), gen_f_dist(u), seq<nid_t>{ep}, L, sctrl).second;
 
 		prune_control pctrl; // TODO: use designated intializers in C++20
 		pctrl.alpha = alpha;
@@ -396,12 +500,21 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end)
 		auto &nbh_v_add = edge_added_grouped[j].second;
 
 		auto edge_agent_v = g.get_edges(v);
+		// TODO: consider moving the filter into conn_cast
+		// TODO: properly pass the move semantics
 		auto edge_v = util::to<seq<edge>>(
 			std::move(edge_agent_v) |
 			std::views::filter([&](const edge &e){
 				return id_map.contain_nid(e.u);
 			})
 		);
+		// TODO: prevent assignment twice
+		/*
+		if(edge_v.size()<get_deg_bound()*0.3)
+			edge_v = edge_cast(
+				algo::beamSearch(gen_f_nbhs(), gen_f_dist(v), seq<nid_t>{ep}, L)
+			);
+		*/
 		edge_v.insert(edge_v.end(),
 			std::make_move_iterator(nbh_v_add.begin()),
 			std::make_move_iterator(nbh_v_add.end())
@@ -418,7 +531,7 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end)
 	g.set_edges(std::move(nbh_backward));
 
 	// finally, update the entrances
-	util::debug_output("Updating entrance\n");
+	util::debug_output("Updating entry point after insertion\n");
 	const auto n_curr = g.num_nodes();
 	((medoid*=n_prev)+=coord_drift)/=n_curr;
 	util::vec<seq<typename point_t::elem_t>> t(util::inner_t{}, medoid.data(), dim);
@@ -429,7 +542,8 @@ void vamana<Desc>::insert_batch_impl(Iter begin, Iter end)
 		},
 		seq<nid_t>{ep},
 		1
-	)[0].u;
+	).first[0].u;
+	util::debug_output("new ep: %u\n", ep);
 }
 
 template<class Desc>
@@ -453,22 +567,34 @@ void vamana<Desc>::erase(Iter begin, Iter end)
 	});
 	auto drift = cm::reduce(r);
 
+	for(nid_t u : nids)
+		relic[u] = util::to<seq<edge>>(g.get_edges(u));
 	((medoid*=g.num_nodes())-=drift);
 	g.remove_nodes(nids.begin(), nids.end());
 
 	id_map.erase(begin, end);
 	deltick++;
 
+	util::debug_output("Updating entry point after erasion\n");
 	medoid /= g.num_nodes();
 	util::vec<seq<typename point_t::elem_t>> t(util::inner_t{}, medoid.data(), dim);
-	ep = algo::beamSearch(
+	auto [workset,chosen] = algo::beamSearch(
 		gen_f_nbhs(),
 		[&](nid_t v){return Desc::distance(
 			t.data(), g.get_node(v)->get_coord(), dim);
 		},
 		seq<nid_t>{id_map.front_nid()},
 		1
-	)[0].u;
+	);
+	ep = workset[0].u;
+	util::debug_output("new ep: %u\n", ep);
+	/*
+	auto &&es = g.get_edges(ep);// TODO: fix the type
+	std::unordered_set hash(es.begin(), es.end());
+	g.set_edges(ep, refine_edge(ep,util::to<seq<edge>>(
+		chosen | std::views::filter([&](const conn &c){return !hash.contains(c.u);})
+	)));
+	*/
 }
 
 template<class Desc>
@@ -476,7 +602,7 @@ template<class Seq>
 Seq vamana<Desc>::search(
 	const coord_t &cq, uint32_t k, uint32_t ef, const search_control &ctrl) const
 {
-	auto nbhs = beamSearch(gen_f_nbhs(), gen_f_dist(cq), seq<nid_t>{ep}, ef, ctrl);
+	auto nbhs = beamSearch(gen_f_nbhs(), gen_f_dist(cq), seq<nid_t>{ep}, ef, ctrl).first;
 
 	nbhs = algo::prune_simple(std::move(nbhs), k/*, ctrl*/); // TODO: set ctrl
 	cm::sort(nbhs.begin(), nbhs.end());
