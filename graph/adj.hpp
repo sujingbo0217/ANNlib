@@ -53,10 +53,15 @@ private:
 			return raw;
 		}
 
+		nid_t get_id() const{
+			return id;
+		}
+
 	protected:
 		using data_t = std::conditional_t<IsConst, const node_t*, node_t*>;
+		nid_t id;
 		data_t raw;
-		ptr_base(data_t raw) : raw(raw){
+		ptr_base(nid_t id, data_t raw) : id(id), raw(raw){
 		}
 
 		friend class adj_base;
@@ -70,16 +75,16 @@ public:
 	struct node_cptr : ptr_base<true>{
 		using ptr_base<true>::ptr_base;
 		node_cptr(const node_ptr &other) :
-			ptr_base<true>(other.raw){
+			ptr_base<true>(other.id, other.raw){
 		}
 	};
 
 protected:
-	static node_ptr gen_node_ptr(node_t *p){
-		return node_ptr(p);
+	static node_ptr gen_node_ptr(nid_t nid, node_t *p){
+		return node_ptr(nid, p);
 	}
-	static node_cptr gen_node_cptr(const node_t *p){
-		return node_cptr(p);
+	static node_cptr gen_node_cptr(nid_t nid, const node_t *p){
+		return node_cptr(nid, p);
 	}
 
 	template<class T>
@@ -120,10 +125,10 @@ protected:
 
 public:
 	node_ptr get_node(nid_t nid){
-		return &nodes[nid];
+		return {nid, &nodes[nid]};
 	}
 	node_cptr get_node(nid_t nid) const{
-		return &nodes[nid];
+		return {nid, &nodes[nid]};
 	}
 
 	node_ptr set_node(nid_t nid, const Ext &ext){
@@ -153,7 +158,7 @@ public:
 
 	template<class Seq>
 	void set_edges(node_ptr p, Seq&& es){
-		if constexpr(std::is_same_v<std::remove_reference_t<Seq>,edgelist>){
+		if constexpr(requires{p.raw->neighbors=std::forward<Seq>(es);}){
 			p.raw->neighbors = std::forward<Seq>(es);
 		}
 		else{
@@ -314,20 +319,20 @@ public:
 
 	template<class F>
 	void iter_each(F &&f) const{
-		for(const auto &u : nodes)
-			f(gen_node_cptr(&u));
+		for(size_t i=0, n=nodes.size(); i<n; ++i)
+			f(gen_node_cptr(i, &nodes[i]));
 	}
 	template<class F>
 	void iter_each(F &&f){
-		for(auto &u : nodes)
-			f(gen_node_ptr(&u));
+		for(size_t i=0, n=nodes.size(); i<n; ++i)
+			f(gen_node_ptr(i, &nodes[i]));
 	}
 	// TODO: eliminate redundant code by deducing 'this' in C++23
 	template<class F>
 	void for_each(F &&f) const{
 		cm::parallel_for(0, nodes.size(),
 			[&,it=nodes.begin()](size_t i){
-				f(gen_node_cptr(&it[i]));
+				f(gen_node_cptr(i, &it[i]));
 			}
 		);
 	}
@@ -335,7 +340,7 @@ public:
 	void for_each(F &&f){
 		cm::parallel_for(0, nodes.size(),
 			[&,it=nodes.begin()](size_t i){
-				f(gen_node_ptr(&it[i]));
+				f(gen_node_ptr(i, &it[i]));
 			}
 		);
 	}
@@ -400,25 +405,25 @@ public:
 	template<class F>
 	void iter_each(F &&f) const{
 		util::iter_each(nodes, [&](const auto &p){
-			f(gen_node_cptr(&p.second));
+			f(gen_node_cptr(p.first, &p.second));
 		});
 	}
 	template<class F>
 	void iter_each(F &&f){
 		util::iter_each(nodes, [&](auto &p){
-			f(gen_node_ptr(&p.second));
+			f(gen_node_ptr(p.first, &p.second));
 		});
 	}
 	template<class F>
 	void for_each(F &&f) const{
 		util::for_each(nodes, [&](const auto &p){
-			f(gen_node_cptr(&p.second));
+			f(gen_node_cptr(p.first, &p.second));
 		});
 	}
 	template<class F>
 	void for_each(F &&f){
 		util::for_each(nodes, [&](auto &p){
-			f(gen_node_ptr(&p.second));
+			f(gen_node_ptr(p.first, &p.second));
 		});
 	}
 };
