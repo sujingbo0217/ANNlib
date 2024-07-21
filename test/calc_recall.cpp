@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include "parse_points.hpp"
 #include "graph/adj.hpp"
+// #include "algo/HCNNG.hpp"
 #include "algo/vamana.hpp"
 #include "dist.hpp"
 #include "parlay.hpp"
@@ -94,6 +95,17 @@ void visit_point(const T &array, size_t dim0, size_t dim1)
 		for(size_t j=1; j<dim1; ++j)
 			elem = a.get_coord()[j];
 	});
+}
+
+template<class G>
+void print_stat(const G &g)
+{
+	puts("#vertices         edges  avg. deg");
+	size_t cnt_vertex = g.num_nodes();
+	size_t cnt_degree = g.num_edges();
+	printf("%14lu %16lu %10.2f\n", 
+		cnt_vertex, cnt_degree, float(cnt_degree)/cnt_vertex
+	);
 }
 
 template<class U>
@@ -376,6 +388,9 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	const uint32_t m = parameter.getOptionIntValue("-m", 40);
 	const uint32_t efc = parameter.getOptionIntValue("-efc", 60);
 	const float alpha = parameter.getOptionDoubleValue("-alpha", 1);
+	const uint32_t num_cl = parameter.getOptionIntValue("-num_cl", 24);
+	const uint32_t cl_size = parameter.getOptionIntValue("-cl_size", 1000);
+	const uint32_t mst_deg = parameter.getOptionIntValue("-mst_deg", 3);
 	const float batch_base = parameter.getOptionDoubleValue("-b", 2);
 	const bool symmetrize = parameter.getOption("--symm");
 	const bool refactor = parameter.getOption("--refactor");
@@ -397,6 +412,12 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	fputs("Start building vamana\n", stderr);
 	vamana<U> g(dim, m, efc, alpha);
 	g.insert(ps.begin(), ps.begin()+ps.size(), batch_base);
+	print_stat(g);
+	/*
+	HCNNG<U> g(ps.begin(), ps.end(), dim,
+		m, alpha, num_cl, cl_size, mst_deg
+	);
+	*/
 	t.next("Build index");
 
 	// post-processing
@@ -445,7 +466,8 @@ int main(int argc, char **argv)
 
 	commandLine parameter(argc, argv, 
 		"-type <elemType> -dist <distance> -n <numInput> -ml <m_l> -m <m> [--reorder] "
-		"-efc <ef_construction> -alpha <alpha> "
+		// "-efc <ef_construction> -alpha <alpha> "
+		"-alpha <alpha> -nc <num_cl> -cs <cl_size> -md <mst_deg> "
 		"--symm [-b <batchBase>] [--refactor] [-rank_frac <frac>=1.0] [-prune new_m]"
 		"-in <inFile> -out <outFile> -q <queryFile> -g <groundtruthFile> [-k <numQuery>=all] "
 		"-ef <ef_query>,... -r <recall@R>,... -th <threshold>,... [-beta <beta>,...] "
@@ -456,21 +478,21 @@ int main(int argc, char **argv)
 	auto run_test_helper = [&](auto type){ // emulate a generic lambda in C++20
 		using T = decltype(type);
 		if(!strcmp(dist_func,"L2"))
-			run_test<desc<descr_l2<T>>>(parameter);/*
+			run_test<desc<descr_l2<T>>>(parameter);
 		else if(!strcmp(dist_func,"angular"))
 			run_test<desc<descr_ang<T>>>(parameter);
 		else if(!strcmp(dist_func,"ndot"))
-			run_test<desc<descr_ndot<T>>>(parameter);*/
+			run_test<desc<descr_ndot<T>>>(parameter);
 		else throw std::invalid_argument("Unsupported distance type");
 	};
 
 	const char* type = parameter.getOptionValue("-type");
 	if(!strcmp(type,"uint8"))
-		run_test_helper(uint8_t{});/*
+		run_test_helper(uint8_t{});
 	else if(!strcmp(type,"int8"))
 		run_test_helper(int8_t{});
 	else if(!strcmp(type,"float"))
-		run_test_helper(float{});*/
+		run_test_helper(float{});
 	
 	else throw std::invalid_argument("Unsupported element type");
 	return 0;
