@@ -2,6 +2,7 @@
 #define __DIST_HPP__
 
 #include <type_traits>
+#include "parse_points.hpp"
 #include "NSGDist.h"
 
 template<typename T>
