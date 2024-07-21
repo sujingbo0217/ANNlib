@@ -101,17 +101,6 @@ void visit_point(const T &array, size_t dim0, size_t dim1)
 	});
 }
 
-template<class G>
-void print_stat(const G &g)
-{
-	puts("#vertices         edges  avg. deg");
-	size_t cnt_vertex = g.num_nodes();
-	size_t cnt_degree = g.num_edges();
-	printf("%14lu %16lu %10.2f\n", 
-		cnt_vertex, cnt_degree, float(cnt_degree)/cnt_vertex
-	);
-}
-
 // assume the snapshots are only of increasing insertions
 template<class R>
 void print_stat_snapshots(const R &snapshots)
@@ -342,6 +331,18 @@ void calc_recall(const S1 &q, const S2 &res, const S3 &gt, uint32_t k)
 	printf("recall: %.6f\n", float(total_shot)/cnt_query/k);
 }
 
+template<typename F>
+auto parse_array(const std::string &s, F f){
+	std::stringstream ss;
+	ss << s;
+	std::string current;
+	std::vector<decltype(f((char*)NULL))> res;
+	while(std::getline(ss, current, ','))
+		res.push_back(f(current.c_str()));
+	std::sort(res.begin(), res.end());
+	return res;
+};
+
 template<typename U>
 void run_test(commandLine parameter) // intend to be pass-by-value manner
 {
@@ -355,7 +356,8 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 	const float batch_base = parameter.getOptionDoubleValue("-b", 2);
 	const char* file_query = parameter.getOptionValue("-q");
 	const uint32_t k = parameter.getOptionIntValue("-k", 10);
-	const uint32_t ef = parameter.getOptionIntValue("-ef", m*20);
+	// const uint32_t ef = parameter.getOptionIntValue("-ef", m*20);
+	const auto efs = parse_array(parameter.getOptionValue("-efs"), atoi);
 	
 	parlay::internal::timer t("run_test:prepare", true);
 
@@ -380,7 +382,7 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 
 	decltype(ps) baseset;
 	vamana<U> g(dim, m, efc, alpha);
-	std::vector<vamana<U>> snapshots;
+	// std::vector<vamana<U>> snapshots;
 	puts("Initialize vamana");
 
 	for(size_t size_last=0, size_curr=size_init;
@@ -401,25 +403,28 @@ void run_test(commandLine parameter) // intend to be pass-by-value manner
 			std::views::transform([](const auto &p){return p.get_id();});
 		g.erase(pids.begin(), pids.end());
 		t.next("Finish deletion");
+		g.consolidate();
+		t.next("Finish consolidation");
 
-		snapshots.push_back(g);
+		// snapshots.push_back(g);
 
 		puts("Collect statistics");
-		print_stat(g);
-
-		puts("Search for neighbors");
-		auto res = find_nbhs(g, q, k, ef);
+		g.print_stat();
 
 		puts("Generate groundtruth");
-
 		baseset.append(
 			ins_begin+(size_curr-size_last)/2,
 			ins_end
 		);
 		auto gt = ConstructKnng<U>(baseset, q, dim, k);
 
-		puts("Compute recall");
-		calc_recall(q, res, gt, k);
+		for(auto ef : efs)
+		{
+			puts("Search for neighbors");
+			auto res = find_nbhs(g, q, k, ef);
+			puts("Compute recall");
+			calc_recall(q, res, gt, k);
+		}
 
 		puts("---");
 	}
