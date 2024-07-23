@@ -29,5 +29,7 @@ calc_recall: calc_recall.cpp
 
 dyn_test: dyn_test.cpp
 
-label_generator calc_recall dyn_test:
+filter_test: filter_test.cpp
+
+label_generator calc_recall dyn_test filter_test:
 	$(CXX) $< $(CXXFLAGS_BASIC) $(CXXFLAGS_RELEASE) $(CXXFLAGS_HDF5) $(CXXFLAGS_JEMALLOC) -o $@
