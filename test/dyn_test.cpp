@@ -245,7 +245,7 @@ auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef) {
 // For filter
 template<class G, class Seq, typename L>
 auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef,
-               const std::vector<std::vector<L>> &F) {
+               const std::vector<std::vector<L>> &F, bool filtered) {
   const size_t cnt_query = q.size();
   // per_visited.resize(cnt_query);
   // per_eval.resize(cnt_query);
@@ -258,6 +258,8 @@ auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef,
       ANN::algo::search_control ctrl{};
       ctrl.log_per_stat = i;
       // ctrl.beta = beta;
+      ctrl.filtered = filtered;
+      ctrl.searching = true;
       res[i] = g.template search<seq_result>(q[i].get_coord(), k, ef, F[i], ctrl);
     });
   };
@@ -517,11 +519,53 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
 
   ////////////////! Filtered Vamana
   else if (!strcmp(vamana_type, "filtered_vamana")) {
-    // decltype(ps) baseset;
-    auto [F_b, _, F_q] = load_label_helper();
+    using nid_t = typename filtered_vamana<U>::nid_t;
+    using pid_t = typename filtered_vamana<U>::pid_t;
+    using label_t = typename filtered_vamana<U>::label_t;
+
+    auto [F_b, P, F_q] = load_label_helper();
     filtered_vamana<U> g(dim, m, efc, alpha);
+    bool filtered = true;
     // std::vector<filtered_vamana<U>> snapshots;
     puts("Initialize Filtered Vamana");
+
+    auto FindMedoid = [&]() -> std::vector<nid_t> {
+      // parallelism
+      size_t n = q.size();
+      std::vector<nid_t> M(n);
+
+      parlay::parallel_for(0, n, [&](size_t i) {
+        const std::vector<label_t> &F = F_q[i];
+        size_t m = F.size();
+        auto f_dist = g.gen_f_dist(q[i].get_coord());
+        std::vector<pid_t> temp(m);
+
+        parlay::parallel_for(0, m, [&](size_t j) {
+          label_t f = F[j];
+          assert(P.find(f) != P.end());
+          const std::vector<pid_t> &p = P[f];
+          pid_t minv = size_max;
+          for (const pid_t &v : p) {
+            const auto d = f_dist(v);
+            if (minv == size_max || d < f_dist(minv)) {
+              minv = v;
+            }
+          }
+          temp[j] = minv;
+        });
+
+        pid_t minv = size_max;
+        for (const pid_t &v : temp) {
+          const auto d = f_dist(v);
+          if (minv == size_max || d < f_dist(minv)) {
+            minv = v;
+          }
+        }
+        M[i] = g.id_map.get_nid(minv);
+      });
+
+      return M;
+    };
 
     for (size_t size_last = 0, size_curr = size_init; size_curr <= size_max;
          size_last = size_curr, size_curr += size_step) {
@@ -536,41 +580,45 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
       auto lb_begin = F_b.begin() + size_last;
       auto lb_end = F_b.begin() + size_curr;
 
-      auto base_labels = ANN::util::to<decltype(F_b)>(std::ranges::subrange(lb_begin, lb_end));
+      auto insert_labels = ANN::util::to<decltype(F_b)>(std::ranges::subrange(lb_begin, lb_end));
 
-      g.insert(ins_begin, ins_end, base_labels, batch_base);
-      t.next("Finish insertion");
+      g.insert(ins_begin, ins_end, insert_labels, batch_base, filtered);
 
       // snapshots.push_back(g);
 
       puts("Collect statistics");
       print_stat(g);
-
-      puts("Search for neighbors");
-      auto res = find_nbhs(g, q, k, ef, F_q);
-
-      puts("Generate groundtruth");
-
-      auto baseset = ANN::util::to<decltype(ps)>(std::ranges::subrange(ps.begin(), ins_end));
-      base_labels = ANN::util::to<decltype(F_b)>(std::ranges::subrange(F_b.begin(), lb_end));
-      auto gt = ConstructKnng<U>(baseset, q, dim, k, base_labels, F_q);
-
-      puts("Compute recall");
-      calc_recall(q, res, gt, k);
-
-      puts("--------------------------------");
     }
+    t.next("Finish insertion");
+
+    puts("Search for neighbors");
+    g.entrance.clear();
+    auto medoid = FindMedoid();
+    g.entrance =
+        ANN::util::to<decltype(g.entrance)>(std::ranges::subrange(medoid.begin(), medoid.end()));
+    auto res = find_nbhs(g, q, k, ef, F_q, filtered);
+
+    puts("Generate groundtruth");
+    // auto baseset = ANN::util::to<decltype(ps)>(std::ranges::subrange(ps.begin(), ins_end));
+    // auto base_labels = ANN::util::to<decltype(F_b)>(std::ranges::subrange(F_b.begin(), lb_end));
+    auto gt = ConstructKnng<U>(ps, q, dim, k, F_b, F_q);
+
+    puts("Compute recall");
+    calc_recall(q, res, gt, k);
+
+    puts("--------------------------------");
   }
 
   ////////////////! Stitched Vamana
   else if (!strcmp(vamana_type, "stitched_vamana")) {
     using nid_t = typename stitched_vamana<U>::nid_t;
     using pid_t = typename stitched_vamana<U>::pid_t;
+    using seq_edge = typename stitched_vamana<U>::seq_edge;
+    using seq_conn = typename stitched_vamana<U>::seq_conn;
+    using prune_control = typename stitched_vamana<U>::prune_control;
+    using cm = typename stitched_vamana<U>::cm;
 
     auto Merge = [alpha, size_max](stitched_vamana<U> from, stitched_vamana<U> &to) -> void {
-      using seq_edge = typename stitched_vamana<U>::seq_edge;
-      using cm = typename stitched_vamana<U>::cm;
-
       // entrance point set update
       for (const auto &ep : from.entrance) {
         to.entrance.push_back(ep);
@@ -593,23 +641,9 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
       size_t n = missing_nodes.size();
       size_t m = existed_nodes.size();
 
-      std::cerr << n << ", " << m << '\n';
+      printf("Missing node num: %lu, Existed node num: %lu\n", n, m);
 
       typename stitched_vamana<U>::seq<std::pair<nid_t, seq_edge>> nbh_missing(n), nbh_existed(m);
-
-      // cm::parallel_for(0, n, [&](size_t i) {
-      //   auto [nid, pid] = missing_nodes[i];
-      //   assert(pid < size_max);
-      //   const auto &node = from.g.get_node(nid);
-      //   auto labels = node->get_label();
-      //   auto coord = node->get_coord();
-      //   to.insert(std::make_pair(pid, nid), coord, labels);
-      //   auto edges = from.g.get_edges(nid);
-      //   // prune is no need
-      //   nbh_missing[i] = std::make_pair(nid, std::move(edges));
-      //   // to.g.set_edges(nid, std::move(edges));
-      // });
-      // to.g.set_edges(std::move(nbh_missing));
 
       for (const auto &[nid, pid] : missing_nodes) {
         assert(pid < size_max);
@@ -617,23 +651,29 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
         const auto &labels = node->get_label();
         const auto &coord = node->get_coord();
         to.insert(std::make_pair(pid, nid), coord, labels);
-        auto edges = from.g.get_edges(nid);
-        // prune is no need
-        to.g.set_edges(nid, std::move(edges));
       }
 
       // parallelism
+      cm::parallel_for(0, n, [&](size_t i) {
+        auto [nid, pid] = missing_nodes[i];
+        assert(pid < size_max && to.id_map.has_node(nid));
+        auto edges = from.g.get_edges(nid);
+        // no need to prune
+        nbh_missing[i] = std::make_pair(nid, edges);
+      });
+      to.g.set_edges(std::move(nbh_missing));
+
       cm::parallel_for(0, m, [&](size_t i) {
         auto [nid, pid] = existed_nodes[i];
         assert(pid < size_max);
         auto to_edges = to.g.get_edges(nid);
         const auto &from_edges = from.g.get_edges(nid);  // keep immutable here
-        auto edge_v = ANN::util::to<typename stitched_vamana<U>::seq_edge>(std::move(to_edges));
+        auto edge_v = ANN::util::to<seq_edge>(std::move(to_edges));
         edge_v.insert(edge_v.end(), std::make_move_iterator(from_edges.begin()),
                       std::make_move_iterator(from_edges.end()));
-        typename stitched_vamana<U>::prune_control pctrl;
+        prune_control pctrl;
         pctrl.alpha = alpha;
-        typename stitched_vamana<U>::seq_conn conn_v =
+        seq_conn conn_v =
             // ANN::algo::prune_simple(to.conn_cast(std::move(edge_v)), to.get_deg_bound());
             ANN::algo::prune_heuristic(to.conn_cast(std::move(edge_v)), to.get_deg_bound(),
                                        to.gen_f_nbhs(), to.gen_f_dist(nid), pctrl);
@@ -649,6 +689,7 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
 
     for (int32_t volume = 0; volume <= 100; volume += 25) {
       stitched_vamana<U> base(dim, m * 2, efc * 2, alpha);
+      bool filtered = false;
       // std::vector<stitched_vamana<U>> snapshots;
 
       puts("Initialize Stitched Vamana");
@@ -698,7 +739,7 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
         auto ins_end = new_ps.end();
 
         stitched_vamana<U> g(dim, m, efc, alpha);
-        g.insert(ins_begin, ins_end, base_labels, batch_base);
+        g.insert(ins_begin, ins_end, base_labels, batch_base, filtered);
 
         Merge(g, base);
         printf("Inserted points w/ label: %lu/%lu\n", ++idx, n_unique_label);
@@ -707,7 +748,7 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
         print_stat(base);
 
         puts("Search for neighbors");
-        auto res = find_nbhs(base, q, k, ef, F_q);
+        auto res = find_nbhs(base, q, k, ef, F_q, filtered);
         t.next("Finish searching");
 
         puts("Generate groundtruth");

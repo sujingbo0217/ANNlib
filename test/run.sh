@@ -6,305 +6,116 @@ export efc=128
 export batch=2
 export alpha=0.83
 export k=10
+export sift=10
+export gist=1
 
-mkdir logs && rm -rf logs/*
-make dyn_test -B &&
+mkdir -p logs
+rm -rf logs/*
+make dyn_test -B
 
-### SIFT
-# Uni
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/uni_base.txt \
-    -lq ../data/labels/uni_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_uni.txt \
-    2> logs/filtered_vamana_sift_k_10_uni.log \
-&&
-# Single
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_10.txt \
-    -lq ../data/labels/single_query_10_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_single_10.txt \
-    2> logs/filtered_vamana_sift_k_10_single_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_20.txt \
-    -lq ../data/labels/single_query_20_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_single_20.txt \
-    2> logs/filtered_vamana_sift_k_10_single_20.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_30.txt \
-    -lq ../data/labels/single_query_30_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_single_30.txt \
-    2> logs/filtered_vamana_sift_k_10_single_30.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_40.txt \
-    -lq ../data/labels/single_query_40_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_single_40.txt \
-    2> logs/filtered_vamana_sift_k_10_single_40.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_50.txt \
-    -lq ../data/labels/single_query_50_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_single_50.txt \
-    2> logs/filtered_vamana_sift_k_10_single_50.log \
-&&
-# ZIPF
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_10_base.txt \
-    -lq ../data/labels/zipf_10_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_zipf_10_10.txt \
-    2> logs/filtered_vamana_sift_k_10_zipf_10_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_50_base.txt \
-    -lq ../data/labels/zipf_10_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_zipf_50_10.txt \
-    2> logs/filtered_vamana_sift_k_10_zipf_50_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_50_base.txt \
-    -lq ../data/labels/zipf_50_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_zipf_50_50.txt \
-    2> logs/filtered_vamana_sift_k_10_zipf_50_50.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_100_base.txt \
-    -lq ../data/labels/zipf_10_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_zipf_100_10.txt \
-    2> logs/filtered_vamana_sift_k_10_zipf_100_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_100_base.txt \
-    -lq ../data/labels/zipf_50_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_zipf_100_50.txt \
-    2> logs/filtered_vamana_sift_k_10_zipf_100_50.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_100_base.txt \
-    -lq ../data/labels/zipf_100_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_zipf_100_100.txt \
-    2> logs/filtered_vamana_sift_k_10_zipf_100_100.log \
-&&
-# Random
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_10_base.txt \
-    -lq ../data/labels/random_10_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_random_10_10.txt \
-    2> logs/filtered_vamana_sift_k_10_random_10_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_50_base.txt \
-    -lq ../data/labels/random_10_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_random_50_10.txt \
-    2> logs/filtered_vamana_sift_k_10_random_50_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_50_base.txt \
-    -lq ../data/labels/random_50_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_random_50_50.txt \
-    2> logs/filtered_vamana_sift_k_10_random_50_50.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_100_base.txt \
-    -lq ../data/labels/random_10_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_random_100_10.txt \
-    2> logs/filtered_vamana_sift_k_10_random_100_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_100_base.txt \
-    -lq ../data/labels/random_50_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_random_100_50.txt \
-    2> logs/filtered_vamana_sift_k_10_random_100_50.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_100_base.txt \
-    -lq ../data/labels/random_100_query_10k.txt \
-    1> logs/filtered_vamana_sift_k_10_random_100_100.txt \
-    2> logs/filtered_vamana_sift_k_10_random_100_100.log \
-&&
+data=("uni" "zipf")
+n_labels=(1 12 50 100)
 
-## GIST
-# Uni
+### SIFT-1M
+
+# vamana
+./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
+    -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
+    -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} -vt vamana \
+    1> logs/vamana_sift_k_${k}.txt 2> logs/vamana_sift_k_${k}.log
+
+for d in "${data[@]}"; do
+    for n in "${n_labels[@]}"; do
+        if [[ "$d" == "zipf" && "$n" == 1 ]]; then
+            continue
+        fi
+
+        # filtered vamana
+        ./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
+            -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
+            -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} -vt filtered_vamana \
+            -lb ../data/labels/${d}_${n}_base.txt -lq ../data/labels/${d}_${n}_query_${sift}k.txt \
+            1> logs/filtered_sift_k_${k}_${d}_${n}.txt 2> logs/filtered_sift_k_${k}_${d}_${n}.log
+
+        # stitched vamana
+        ./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
+            -in ../data/data/sift/sift_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
+            -q ../data/data/sift/sift_query.fvecs:fvecs -alpha ${alpha} -k ${k} -vt stitched_vamana \
+            -lb ../data/labels/${d}_${n}_base.txt -lq ../data/labels/${d}_${n}_query_${sift}k.txt \
+            1> logs/stitched_sift_k_${k}_${d}_${n}.txt 2> logs/stitched_sift_k_${k}_${d}_${n}.log
+    done
+done
+
+### GIST-1M
+
+# vamana
 ./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
     -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/uni_base.txt \
-    -lq ../data/labels/uni_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_uni.txt \
-    2> logs/filtered_vamana_gist_k_10_uni.log \
-&&
-# Single
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_10.txt \
-    -lq ../data/labels/single_query_10_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_single_10.txt \
-    2> logs/filtered_vamana_gist_k_10_single_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_20.txt \
-    -lq ../data/labels/single_query_20_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_single_20.txt \
-    2> logs/filtered_vamana_gist_k_10_single_20.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_30.txt \
-    -lq ../data/labels/single_query_30_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_single_30.txt \
-    2> logs/filtered_vamana_gist_k_10_single_30.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_40.txt \
-    -lq ../data/labels/single_query_40_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_single_40.txt \
-    2> logs/filtered_vamana_gist_k_10_single_40.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/single_base_50.txt \
-    -lq ../data/labels/single_query_50_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_single_50.txt \
-    2> logs/filtered_vamana_gist_k_10_single_50.log \
-&&
-# ZIPF
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_10_base.txt \
-    -lq ../data/labels/zipf_10_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_zipf_10_10.txt \
-    2> logs/filtered_vamana_gist_k_10_zipf_10_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_50_base.txt \
-    -lq ../data/labels/zipf_10_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_zipf_50_10.txt \
-    2> logs/filtered_vamana_gist_k_10_zipf_50_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_50_base.txt \
-    -lq ../data/labels/zipf_50_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_zipf_50_50.txt \
-    2> logs/filtered_vamana_gist_k_10_zipf_50_50.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_100_base.txt \
-    -lq ../data/labels/zipf_10_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_zipf_100_10.txt \
-    2> logs/filtered_vamana_gist_k_10_zipf_100_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_100_base.txt \
-    -lq ../data/labels/zipf_50_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_zipf_100_50.txt \
-    2> logs/filtered_vamana_gist_k_10_zipf_100_50.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/zipf_100_base.txt \
-    -lq ../data/labels/zipf_100_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_zipf_100_100.txt \
-    2> logs/filtered_vamana_gist_k_10_zipf_100_100.log \
-&&
-# Random
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_10_base.txt \
-    -lq ../data/labels/random_10_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_random_10_10.txt \
-    2> logs/filtered_vamana_gist_k_10_random_10_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_50_base.txt \
-    -lq ../data/labels/random_10_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_random_50_10.txt \
-    2> logs/filtered_vamana_gist_k_10_random_50_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_50_base.txt \
-    -lq ../data/labels/random_50_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_random_50_50.txt \
-    2> logs/filtered_vamana_gist_k_10_random_50_50.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_100_base.txt \
-    -lq ../data/labels/random_10_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_random_100_10.txt \
-    2> logs/filtered_vamana_gist_k_10_random_100_10.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_100_base.txt \
-    -lq ../data/labels/random_50_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_random_100_50.txt \
-    2> logs/filtered_vamana_gist_k_10_random_100_50.log \
-&&
-./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
-    -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
-    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} \
-    -lb ../data/labels/random_100_base.txt \
-    -lq ../data/labels/random_100_query_1k.txt \
-    1> logs/filtered_vamana_gist_k_10_random_100_100.txt \
-    2> logs/filtered_vamana_gist_k_10_random_100_100.log
+    -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} -vt vamana \
+    1> logs/vamana_gist_k_${k}.txt 2> logs/vamana_gist_k_${k}.log
+
+for d in "${data[@]}"; do
+    for n in "${n_labels[@]}"; do
+        if [[ "$d" == "zipf" && "$n" == 1 ]]; then
+            continue
+        fi
+
+        # filtered vamana
+        ./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
+            -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
+            -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} -vt filtered_vamana \
+            -lb ../data/labels/${d}_${n}_base.txt -lq ../data/labels/${d}_${n}_query_${gist}k.txt \
+            1> logs/filtered_gist_k_${k}_${d}_${n}.txt 2> logs/filtered_gist_k_${k}_${d}_${n}.log
+
+        # stitched vamana
+        ./dyn_test -init 200000 -step 200000 -max 1000000 -type float -dist L2 \
+            -in ../data/data/gist/gist_base.fvecs:fvecs -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
+            -q ../data/data/gist/gist_query.fvecs:fvecs -alpha ${alpha} -k ${k} -vt stitched_vamana \
+            -lb ../data/labels/${d}_${n}_base.txt -lq ../data/labels/${d}_${n}_query_${gist}k.txt \
+            1> logs/stitched_gist_k_${k}_${d}_${n}.txt 2> logs/stitched_gist_k_${k}_${d}_${n}.log
+    done
+done
+
+### YFCC-1M
+
+# vamana
+./dyn_test -init 200000 -step 200000 -max 1000000 -type uint8 -dist L2 \
+    -in ../data/data/yfcc100M/base.10M.u8bin.crop_nb_10000000:u8bin -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
+    -q ../data/data/yfcc100M/query.public.100K.u8bin:u8bin -alpha ${alpha} -k ${k} -vt vamana \
+    1> logs/vamana_yfcc1m_k_${k}.txt 2> logs/vamana_yfcc1m_${k}.log
+
+# filtered vamana
+./dyn_test -init 200000 -step 200000 -max 1000000 -type uint8 -dist L2 \
+    -in ../data/data/yfcc100M/base.10M.u8bin.crop_nb_10000000:u8bin -m $((m * 2)) -ef $((ef * 2)) -efc $((efc * 2)) -b ${batch} \
+    -q ../data/data/yfcc100M/query.public.100K.u8bin:u8bin -alpha ${alpha} -k ${k} -vt filtered_vamana \
+    -lb ../data/labels/yfcc_base.txt -lq ../data/labels/yfcc_query.txt \
+    1> logs/filtered_yfcc1m_k_${k}.txt 2> logs/filtered_yfcc1m_${k}.log
+
+# stitched vamana
+# ./dyn_test -init 200000 -step 200000 -max 1000000 -type uint8 -dist L2 \
+#     -in ../data/data/yfcc100M/base.10M.u8bin.crop_nb_10000000:u8bin -m ${m} -ef ${ef} -efc ${efc} -b ${batch} \
+#     -q ../data/data/yfcc100M/query.public.100K.u8bin:u8bin -alpha ${alpha} -k ${k} -vt stitched_vamana \
+#     -lb ../data/labels/yfcc_base.txt -lq ../data/labels/yfcc_query.txt \
+#     1> logs/stitched_yfcc1m_k_${k}.txt 2> logs/stitched_yfcc1m_${k}.log
+
+### YFCC-10M
+
+# vamana
+./dyn_test -init 1000000 -step 1000000 -max 10000000 -type uint8 -dist L2 \
+    -in ../data/data/yfcc100M/base.10M.u8bin.crop_nb_10000000:u8bin -m $((m * 2)) -ef $((ef * 2)) -efc $((efc * 2)) -b ${batch} \
+    -q ../data/data/yfcc100M/query.public.100K.u8bin:u8bin -alpha ${alpha} -k ${k} -vt vamana \
+    1> logs/vamana_yfcc10m_k_${k}.txt 2> logs/vamana_yfcc10m_${k}.log
+
+# filtered vamana
+./dyn_test -init 1000000 -step 1000000 -max 10000000 -type uint8 -dist L2 \
+    -in ../data/data/yfcc100M/base.10M.u8bin.crop_nb_10000000:u8bin -m $((m * 2)) -ef $((ef * 2)) -efc $((efc * 2)) -b ${batch} \
+    -q ../data/data/yfcc100M/query.public.100K.u8bin:u8bin -alpha ${alpha} -k ${k} -vt filtered_vamana \
+    -lb ../data/labels/yfcc_base.txt -lq ../data/labels/yfcc_query.txt \
+    1> logs/filtered_yfcc10m_k_${k}.txt 2> logs/filtered_yfcc10m_${k}.log
+
+# stitched vamana
+# ./dyn_test -init 1000000 -step 1000000 -max 10000000 -type uint8 -dist L2 \
+#     -in ../data/data/yfcc100M/base.10M.u8bin.crop_nb_10000000:u8bin -m $((m * 2)) -ef $((ef * 2)) -efc $((efc * 2)) -b ${batch} \
+#     -q ../data/data/yfcc100M/query.public.100K.u8bin:u8bin -alpha ${alpha} -k ${k} -vt stitched_vamana \
+#     -lb ../data/labels/yfcc_base.txt -lq ../data/labels/yfcc_query.txt \
+#     1> logs/stitched_yfcc10m_k_${k}.txt 2> logs/stitched_yfcc10m_${k}.log

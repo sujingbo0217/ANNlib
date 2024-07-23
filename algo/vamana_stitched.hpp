@@ -104,7 +104,7 @@ namespace ANN {
    public:
     template<typename Iter>
     void insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F,
-                float batch_base = 2);
+                float batch_base = 2, bool filtered = false);
 
     void insert(const std::pair<pid_t, nid_t> &nid, const coord_t &coord,
                 const std::vector<label_t> &F);
@@ -141,7 +141,8 @@ namespace ANN {
     // template<typename Iter>
     // void insert_batch_impl(Iter begin, Iter end);
     template<typename Iter>
-    void insert_batch_impl(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F);
+    void insert_batch_impl(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F,
+                           bool filtered);
 
    public:
     uint32_t get_deg_bound() const {
@@ -167,7 +168,7 @@ namespace ANN {
 
       return dist_evaluator(g, c, dim);
     }
-    
+
     auto gen_f_dist(nid_t u) const {
       return gen_f_dist(g.get_node(u)->get_coord());
     }
@@ -192,8 +193,8 @@ namespace ANN {
       };
     }
 
-    template<class G>
-    auto get_f_label(const G &g) const {
+    // template<class G>
+    auto get_f_label(/*const G &g*/) const {
       return [&](nid_t u) -> decltype(auto) { return g.get_node(u)->get_label(); };
     }
 
@@ -228,7 +229,8 @@ namespace ANN {
   template<class Desc>
   template<typename Iter>
   void stitched_vamana<Desc>::insert(Iter begin, Iter end,
-                                     const std::vector<std::vector<label_t>> &F, float batch_base) {
+                                     const std::vector<std::vector<label_t>> &F, float batch_base,
+                                     bool filtered) {
     static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
     static_assert(std::is_base_of_v<std::random_access_iterator_tag,
                                     typename std::iterator_traits<Iter>::iterator_category>);
@@ -275,7 +277,8 @@ namespace ANN {
       // insert_batch_impl(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end);
       auto subrange = std::ranges::subrange(F.begin() + batch_begin, F.begin() + batch_end);
       std::vector new_labels(subrange.begin(), subrange.end());
-      insert_batch_impl(rand_seq.begin() + batch_begin, rand_seq.begin() + batch_end, new_labels);
+      insert_batch_impl(rand_seq.begin() + batch_begin, rand_seq.begin() + batch_end, new_labels,
+                        filtered);
       // insert(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end, false);
 
       // if (batch_end > n * (progress + 0.05)) {
@@ -309,7 +312,8 @@ namespace ANN {
   template<class Desc>
   template<typename Iter>
   void stitched_vamana<Desc>::insert_batch_impl(Iter begin, Iter end,
-                                                const std::vector<std::vector<label_t>> &F) {
+                                                const std::vector<std::vector<label_t>> &F,
+                                                bool filtered) {
     const size_t batch_size = std::distance(begin, end);
     assert(F.size() == batch_size);
     seq<nid_t> nids(batch_size);
@@ -343,8 +347,10 @@ namespace ANN {
       auto &eps_u = entrance;
       search_control sctrl;  // TODO: use designated initializers in C++20
       sctrl.log_per_stat = i;
+      sctrl.filtered = filtered;
+      sctrl.searching = false;
       seq<conn> res =
-          algo::beamSearch(gen_f_nbhs(), gen_f_dist(u), get_f_label(g), eps_u, L, F[i], sctrl);
+          algo::beamSearch(gen_f_nbhs(), gen_f_dist(u), get_f_label(), eps_u, L, F[i], sctrl);
 
       prune_control pctrl;  // TODO: use designated intializers in C++20
       pctrl.alpha = alpha;
@@ -400,13 +406,14 @@ namespace ANN {
                                     const search_control &ctrl) const {
     seq<nid_t> eps = entrance;
     // auto nbhs = beamSearch(gen_f_nbhs(), gen_f_dist(cq), eps, ef, ctrl);
-    auto nbhs = algo::beamSearch(gen_f_nbhs(), gen_f_dist(cq), get_f_label(g), eps, ef, F, ctrl);
+    auto nbhs = algo::beamSearch(gen_f_nbhs(), gen_f_dist(cq), get_f_label(), eps, ef, F, ctrl);
 
-    nbhs = algo::prune_simple(std::move(nbhs), k /*, ctrl*/);  // TODO: set ctrl
     cm::sort(nbhs.begin(), nbhs.end());
+    nbhs = algo::prune_simple(std::move(nbhs), k /*, ctrl*/);  // TODO: set ctrl
 
     using result_t = typename Seq::value_type;
     static_assert(util::is_direct_list_initializable_v<result_t, dist_t, pid_t>);
+
     Seq res(nbhs.size());
     cm::parallel_for(0, nbhs.size(), [&](size_t i) {
       const auto &nbh = nbhs[i];
