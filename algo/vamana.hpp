@@ -59,6 +59,7 @@ namespace ANN{
 template<class Desc>
 class vamana
 {
+	protected:
 	using cm = custom<typename lookup_custom_tag<Desc>::type>;
 
 	template<typename T>
