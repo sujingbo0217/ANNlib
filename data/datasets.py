@@ -29,16 +29,19 @@ class Dataset():
         Download and prepare dataset, queries, groundtruth.
         """
         pass
+
     def get_dataset_fn(self):
         """
         Return filename of dataset file.
         """
         pass
+
     def get_dataset(self):
         """
         Return memmapped version of the dataset.
         """
         pass
+
     def get_dataset_iterator(self, bs=512, split=(1, 0)):
         """
         Return iterator over blocks of dataset of size at most 512.
@@ -48,16 +51,19 @@ class Dataset():
         processes / threads.
         """
         pass
+
     def get_queries(self):
         """
         Return (nq, d) array containing the nq queries.
         """
         pass
+
     def get_private_queries(self):
         """
         Return (private_nq, d) array containing the private_nq private queries.
         """
         pass
+
     def get_groundtruth(self, k=None):
         """
         Return (nq, k) array containing groundtruth indices
@@ -181,7 +187,7 @@ class DatasetCompetitionFormat(Dataset):
         else:
             raise RuntimeError("file not found")
 
-    def get_dataset_iterator(self, bs=512, split=(1,0)):
+    def get_dataset_iterator(self, bs=512, split=(1, 0)):
         nsplit, rank = split
         i0, i1 = self.nb * rank // nsplit, self.nb * (rank + 1) // nsplit
         filename = self.get_dataset_fn()
@@ -245,6 +251,21 @@ class DatasetCompetitionFormat(Dataset):
             I = I[:, :k]
             D = D[:, :k]
         return I, D
+
+
+class BillionScaleDatasetCompetitionFormat(DatasetCompetitionFormat):
+
+    def get_dataset_fn(self):
+        fn = os.path.join(self.basedir, self.ds_fn)
+        if self.nb != 10**9:
+            fn += '.crop_nb_%d' % self.nb
+        if os.path.exists(fn):
+            return fn
+        else:
+            raise RuntimeError("file %s not found" % fn)
+
+
+subset_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/"
 
 
 class BigANNDataset(DatasetCompetitionFormat):
@@ -364,7 +385,8 @@ class YFCC100MDataset(DatasetCompetitionFormat):
 
 def _strip_gz(filename):
     if not filename.endswith('.gz'):
-        raise RuntimeError(f"expected a filename ending with '.gz'. Received: {filename}")
+        raise RuntimeError(
+            f"expected a filename ending with '.gz'. Received: {filename}")
     return filename[:-3]
 
 
@@ -431,9 +453,9 @@ class OpenAIEmbedding1M(DatasetCompetitionFormat):
             desc="Brute force scan using FAISS",
             unit=" batch",
         ):
-            D, I = index.search(queries[i : i + batch_size], k)
-            ids[i : i + batch_size] = I
-            distances[i : i + batch_size] = D
+            D, I = index.search(queries[i: i + batch_size], k)
+            ids[i: i + batch_size] = I
+            distances[i: i + batch_size] = D
         with open(os.path.join(self.basedir, self.gt_fn), "wb") as f:
             np.array(ids.shape, dtype=np.uint32).tofile(f)
             ids.tofile(f)
@@ -467,10 +489,34 @@ class OpenAIEmbedding1M(DatasetCompetitionFormat):
         return f"{self.__class__.__name__}-{self.nb}"
 
 
-ds = YFCC100MDataset()
-ds.prepare()
+class MSTuringANNS(BillionScaleDatasetCompetitionFormat):
+    def __init__(self, nb_M=1000):
+        self.nb_M = nb_M
+        self.nb = 2599968   #10**6 * nb_M
+        self.d = 100
+        self.nq = 100000
+        self.dtype = "float32"
+        self.ds_fn = "base1b.fbin"
+        self.qs_fn = "query100K.fbin"
+        self.gt_fn = (
+            "query_gt100.bin" if self.nb_M == 1000 else
+            # back up subset_url + "GT_100M/msturing-100M"
+            "msturing-gt-100M" if self.nb_M == 100 else
+            # back up subset_url + "GT_100M/msturing-10M"
+            "msturing-gt-10M" if self.nb_M == 10 else
+            "msturing-gt-1M" if self.nb_M == 1 else
+            None
+        )
+        self.base_url = "https://comp21storage.z5.web.core.windows.net/comp21/MSFT-TURING-ANNS/"
+        self.basedir = os.path.join(BASEDIR, "MSTuringANNS")
 
-print(f"Base data shape: {ds.get_dataset().shape}")
-print(f"Base label shape: {ds.get_dataset_metadata().shape}")
-print(f"Query data shape: {ds.get_queries().shape}")
-print(f"Query label shape: {ds.get_queries_metadata().shape}")
+        self.private_nq = 10000
+        self.private_qs_url = "https://comp21storage.z5.web.core.windows.net/comp21/MSFT-TURING-ANNS/testQuery10K.fbin"
+        self.private_gt_url = "https://comp21storage.z5.web.core.windows.net/comp21/MSFT-TURING-ANNS/gt100-private10K-queries.bin"
+
+        self.private_nq_large = 99605
+        self.private_qs_large_url = "https://comp21storage.z5.web.core.windows.net/comp21/MSFT-TURING-ANNS/testQuery99605.fbin"
+        self.private_gt_large_url = "https://comp21storage.z5.web.core.windows.net/comp21/MSFT-TURING-ANNS/gt100-private99605-queries.bin"
+
+    def distance(self):
+        return "euclidean"
