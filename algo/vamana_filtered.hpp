@@ -5,14 +5,12 @@
 
 namespace ANN {
 
-  template<class Desc>
-  class filtered_vamana : public stitched_vamana<Desc> {
-
-   public:
-    filtered_vamana(uint32_t dim, uint32_t R, uint32_t L, float alpha)
-        : stitched_vamana<Desc>(dim, R, L, alpha) {}
-
-  };
+template<class Desc>
+class filtered_vamana : public stitched_vamana<Desc> {
+ public:
+  filtered_vamana(uint32_t dim, uint32_t R, uint32_t L, float alpha)
+      : stitched_vamana<Desc>(dim, R, L, alpha) {}
+};
 
 }  // namespace ANN
 
