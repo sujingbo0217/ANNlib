@@ -293,45 +293,72 @@ template<typename L = uint32_t, typename pid_t = uint32_t>
 inline std::pair<std::vector<std::vector<L>>,
                  std::variant<std::unordered_map<L, std::vector<pid_t>>,
                               std::vector<std::pair<L, std::vector<pid_t>>>>>
-load_label(const char *file_path, size_t max_size = 0, bool ret_pair = true) {
-  std::ifstream file(file_path);
-  if (!file) {
-    std::cerr << "Error: Unable to open file " << file_path << std::endl;
-    exit(-1);
-  }
-  std::string line;
-  std::getline(file, line);
-  std::istringstream num_points_iss(line);
+load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
+  auto [fileptr, length] = mmapStringFromFile(file_path);
 
-  size_t num_points;
-  num_points_iss >> num_points;
-  num_points = (max_size == 0 ? num_points : max_size);
-  // max_size = std::min<size_t>(max_size, num_points);
+  const uint32_t cnt_points = *reinterpret_cast<uint32_t *>(fileptr);
+  const uint32_t num_points =
+      (max_size == 0 ? cnt_points : std::min<uint32_t>(max_size, cnt_points));
+  const uint32_t *data_ptr = reinterpret_cast<const uint32_t *>(fileptr + sizeof(uint32_t));
 
   std::vector<std::vector<L>> F(num_points);
   std::unordered_map<L, std::vector<pid_t>> P;
-  size_t i = 0;
   size_t total_labels = 0;
 
-  while (i < num_points) {
-    std::getline(file, line);
+  for (uint32_t i = 0; i < num_points; ++i) {
     std::vector<L> node_labels;
-    std::istringstream node_iss(line);
-    L label;
-    char comma;
-    while (node_iss >> label) {
+    while (*data_ptr != std::numeric_limits<uint32_t>::max()) {
+      L label = *data_ptr++;
       node_labels.push_back(label);
       P[label].push_back(static_cast<pid_t>(i));
-      node_iss >> comma;
     }
-    std::sort(node_labels.begin(), node_labels.end());
-    // F.push_back(node_labels);
+    data_ptr++;
+    // std::sort(node_labels.begin(), node_labels.end());
     F[i] = node_labels;
     total_labels += node_labels.size();
-    ++i;
   }
-  file.close();
 
+  munmap(fileptr, length);
+
+  // std::ifstream file(file_path);
+  // if (!file) {
+  //   std::cerr << "Error: Unable to open file " << file_path << std::endl;
+  //   exit(-1);
+  // }
+  // std::string line;
+  // std::getline(file, line);
+  // std::istringstream num_points_iss(line);
+
+  // size_t num_points;
+  // num_points_iss >> num_points;
+  // num_points = (max_size == 0 ? num_points : max_size);
+  // // max_size = std::min<size_t>(max_size, num_points);
+
+  // std::vector<std::vector<L>> F(num_points);
+  // std::unordered_map<L, std::vector<pid_t>> P;
+  // size_t i = 0;
+  // size_t total_labels = 0;
+
+  // while (i < num_points) {
+  //   std::getline(file, line);
+  //   std::vector<L> node_labels;
+  //   std::istringstream node_iss(line);
+  //   L label;
+  //   char comma;
+  //   while (node_iss >> label) {
+  //     node_labels.push_back(label);
+  //     P[label].push_back(static_cast<pid_t>(i));
+  //     node_iss >> comma;
+  //   }
+  //   std::sort(node_labels.begin(), node_labels.end());
+  //   // F.push_back(node_labels);
+  //   F[i] = node_labels;
+  //   total_labels += node_labels.size();
+  //   ++i;
+  // }
+  // file.close();
+
+  std::cout << "Total labels: " << total_labels << std::endl;
   std::cout << std::fixed << std::setprecision(2)
             << "Filters per Point: " << (float)total_labels / (float)num_points << std::endl;
 
