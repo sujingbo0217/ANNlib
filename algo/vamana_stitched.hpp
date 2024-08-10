@@ -89,7 +89,7 @@ class stitched_vamana : public vamana<Desc> {
     }
   };
 
-  using graph_t = typename Desc::graph_map_t<nid_t, node_t, edge>;
+  using graph_t = typename Desc::graph_aux<nid_t, node_t, edge>;
 
  public:
   template<typename T>
@@ -228,6 +228,34 @@ class stitched_vamana : public vamana<Desc> {
       return g.get_node(u)->get_label();
     };
   }
+
+  template<class Op>
+  auto calc_degs(Op op) const {
+    seq<size_t> degs(cm::num_workers(), 0);
+    g.for_each([&](auto p) {
+      auto &deg = degs[cm::worker_id()];
+      deg = op(deg, num_edges(p.get_id()));
+    });
+    return cm::reduce(degs, size_t(0), op);
+  }
+
+  size_t num_nodes() const {
+    return g.num_nodes();
+  }
+
+  size_t num_edges(nid_t u) const {
+    // return g.get_edges(u).size();
+    return std::ranges::distance(gen_f_nbhs()(u));
+  }
+  size_t num_edges() const {
+    return calc_degs(std::plus<>{});
+  }
+
+  size_t max_deg() const {
+    return calc_degs([](size_t x, size_t y) {
+      return std::max(x, y);
+    });
+  }
 };
 
 template<class Desc>
@@ -351,13 +379,13 @@ void stitched_vamana<Desc>::insert_batch_impl(Iter begin, Iter end,
   cm::parallel_for(0, batch_size, [&](size_t i) {
     const nid_t u = nids[i];
 
-    auto &eps_u = entrance;
+    // auto &eps_u = entrance;
     search_control sctrl;  // TODO: use designated initializers in C++20
     sctrl.log_per_stat = i;
     sctrl.filtered = filtered;
     sctrl.searching = false;
     seq_conn res =
-        algo::beamSearch(gen_f_nbhs(), gen_f_dist(u), get_f_label(), eps_u, L, F[i], sctrl);
+        algo::beamSearch(gen_f_nbhs(), gen_f_dist(u), get_f_label(), entrance, L, F[i], sctrl);
 
     prune_control pctrl;  // TODO: use designated intializers in C++20
     pctrl.alpha = alpha;
@@ -391,6 +419,10 @@ void stitched_vamana<Desc>::insert_batch_impl(Iter begin, Iter end,
 
     auto edge_agent_v = g.get_edges(v);
     auto edge_v = util::to<seq_edge>(std::move(edge_agent_v));
+    // auto edge_v =
+    //     util::to<seq_edge>(std::move(edge_agent_v) | std::views::filter([&](const edge &e) {
+    //                          return id_map.contain_nid(e.u);
+    //                        }));
     edge_v.insert(edge_v.end(), std::make_move_iterator(nbh_v_add.begin()),
                   std::make_move_iterator(nbh_v_add.end()));
 
@@ -402,17 +434,16 @@ void stitched_vamana<Desc>::insert_batch_impl(Iter begin, Iter end,
   g.set_edges(std::move(nbh_backward));
 
   // finally, update the entrances
-  util::debug_output("Updating entrance\n");
-  // UNIMPLEMENTED
+  // entrance.insert(entrance.end(), nids.begin(), nids.end());
 }
 
 template<class Desc>
 template<class Seq>
 Seq stitched_vamana<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef,
                                   const std::vector<label_t> &F, const search_control &ctrl) const {
-  seq<nid_t> eps = entrance;
+  // seq<nid_t> eps = entrance;
   // auto nbhs = beamSearch(gen_f_nbhs(), gen_f_dist(cq), eps, ef, ctrl);
-  auto nbhs = algo::beamSearch(gen_f_nbhs(), gen_f_dist(cq), get_f_label(), eps, ef, F, ctrl);
+  auto nbhs = algo::beamSearch(gen_f_nbhs(), gen_f_dist(cq), get_f_label(), entrance, ef, F, ctrl);
 
   cm::sort(nbhs.begin(), nbhs.end());
   nbhs = algo::prune_simple(std::move(nbhs), k /*, ctrl*/);  // TODO: set ctrl
