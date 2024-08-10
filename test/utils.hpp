@@ -40,7 +40,7 @@ template<class G>
 void print_layers(const G &g) {
   const uint32_t height = g.get_height();
   printf("Highest level: %u\n", height);
-  puts("level     #vertices         edges  avg. deg");
+  puts("level     #vertices         edges        avg. deg");
   for (uint32_t i = 0; i <= height; ++i) {
     const uint32_t level = height - i;
     size_t cnt_vertex = g.num_nodes(level);
@@ -237,7 +237,7 @@ auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef,
 }
 
 // For post processing
-template<class U, class G, class Seq, typename L>
+template<class G, class Seq, typename L>
 auto post_processing(const G &g, const Seq &q, uint32_t k, uint32_t ef,
                      const std::vector<std::vector<L>> &F_b,
                      const std::vector<std::vector<L>> &F_q) {
@@ -382,12 +382,9 @@ void calc_recall(const S1 &q, const S2 &res, const S3 &gt, uint32_t k) {
   for (uint32_t i = 0; i < cnt_query; ++i) {
     uint32_t cnt_shot = 0;
     for (uint32_t j = 0; j < k; ++j) {
-      auto it = std::find_if(res[i].begin(), res[i].end(), [&](const auto &p) {
-        return p.pid == gt[i][j];
-      });
-      // if (std::find_if(res[i].begin(), res[i].end(),
-      //                  [&](const auto &p) { return p.pid == gt[i][j]; }) != res[i].end()) {
-      if (it != res[i].end() && it->dist != std::numeric_limits<decltype(it->dist)>::max()) {
+      if (std::find_if(res[i].begin(), res[i].end(), [&](const auto &p) {
+            return p.dist != std::numeric_limits<decltype(p.dist)>::max() && p.pid == gt[i][j];
+          }) != res[i].end()) {
         cnt_shot++;
       }
     }
@@ -416,7 +413,7 @@ inline auto load_label_helper(auto type, const char *file_label_in, const char *
   auto [F_q, P_q_v] = load_label<L, pid_t>(file_label_query);
   auto P_q = std::get<std::vector<std::pair<L, std::vector<pid_t>>>>(P_q_v);
   t.next("Load query labels");
-  printf("Load %lu query points w/ labels\n", F_q.size());
+  printf("Load %lu query points w/ labels\n\n", F_q.size());
 
   return std::make_tuple(F_b, P_b, F_q, P_q);
 }

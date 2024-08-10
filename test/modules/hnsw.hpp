@@ -18,15 +18,14 @@
 
 using ANN::HNSW;
 
-template<typename U>
+template<class U, class Seq>
 void run_hnsw(uint32_t dim, float m_l, uint32_t m, uint32_t efc, float alpha, float batch_base,
-              uint32_t k, uint32_t ef, size_t size_init, size_t size_step, size_t size_max, auto ps,
-              auto q) {
+              uint32_t k, uint32_t ef, size_t size_init, size_t size_step, size_t size_max,
+              const Seq& ps, const Seq& q) {
   // decltype(ps) baseset;
   HNSW<U> layers(dim, m_l, m, efc, alpha);
   // std::vector<vamana<U>> snapshots;
-  puts("Initialize Vamana");
-
+  puts("Initialize HNSW");
   parlay::internal::timer t;
 
   for (size_t size_last = 0, size_curr = size_init; size_curr <= size_max;
@@ -34,8 +33,6 @@ void run_hnsw(uint32_t dim, float m_l, uint32_t m, uint32_t efc, float alpha, fl
     printf("Increasing size from %lu to %lu\n", size_last, size_curr);
 
     puts("Insert points");
-    parlay::internal::timer t("run_test:insert", true);
-
     auto ins_begin = ps.begin() + size_last;
     auto ins_end = ps.begin() + size_curr;
 
@@ -60,13 +57,10 @@ void run_hnsw(uint32_t dim, float m_l, uint32_t m, uint32_t efc, float alpha, fl
   auto res = find_nbhs(layers, q, k, ef);
 
   puts("Generate groundtruth");
-
-  // baseset.append(ins_begin + (size_curr - size_last) / 2, ins_end);
-  // auto baseset = ANN::util::to<decltype(ps)>(std::ranges::subrange(ps.begin(), ins_end));
   auto gt = ConstructKnng<U>(ps, q, dim, k);
 
   puts("Compute recall");
   calc_recall(q, res, gt, k);
 
-  puts("--------------------------------");
+  puts("--------------------------------\n");
 }
