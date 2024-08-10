@@ -118,15 +118,11 @@ private:
 		return reinterpret_cast<const seq<conn>&>(es);
 	}
 
-protected:
 	struct node_lite{
 		coord_t& get_coord(); // not in use
 		const coord_t& get_coord() const; // not in use
 	};
 
-	using graph_lite = typename Desc::graph_aux<nid_t,node_lite,edge>;
-
-private:
 	struct node_fat{
 		uint32_t level;
 		coord_t coord;
@@ -140,6 +136,7 @@ private:
 	};
 
 	using graph_fat = typename Desc::graph_t<nid_t,node_fat,edge>;
+	using graph_lite = typename Desc::graph_aux<nid_t,node_lite,edge>;
 
 	// the bottom layer 0 is stored in `layer_b` with all needed data (level, coordinate, etc)
 	// the upper layers 1..lev_ep are stored in `layer_u[]` 
@@ -343,7 +340,7 @@ void HNSW<Desc>::insert(Iter begin, Iter end, float batch_base)
 	}
 
 	size_t batch_begin=0, batch_end=cnt_skip, size_limit=std::max<size_t>(n*0.02,20000);
-	float progress = 0.0;
+	// float progress = 0.0;
 	while(batch_end<n)
 	{
 		batch_begin = batch_end;
