@@ -18,6 +18,7 @@
 #include <thread>
 #include "algo/algo.hpp"
 #include "map/direct.hpp"
+#include "map/trivial.hpp"
 #include "util/debug.hpp"
 #include "util/helper.hpp"
 #include "custom/custom.hpp"
@@ -54,6 +55,7 @@ namespace ANN{
 template<class Desc>
 class HNSW
 {
+protected:
 	using cm = custom<typename lookup_custom_tag<Desc>::type>;
 
 	typedef uint32_t nid_t;
@@ -116,11 +118,15 @@ private:
 		return reinterpret_cast<const seq<conn>&>(es);
 	}
 
+protected:
 	struct node_lite{
 		coord_t& get_coord(); // not in use
 		const coord_t& get_coord() const; // not in use
 	};
 
+	using graph_lite = typename Desc::graph_aux<nid_t,node_lite,edge>;
+
+private:
 	struct node_fat{
 		uint32_t level;
 		coord_t coord;
@@ -134,7 +140,6 @@ private:
 	};
 
 	using graph_fat = typename Desc::graph_t<nid_t,node_fat,edge>;
-	using graph_lite = typename Desc::graph_aux<nid_t,node_lite,edge>;
 
 	// the bottom layer 0 is stored in `layer_b` with all needed data (level, coordinate, etc)
 	// the upper layers 1..lev_ep are stored in `layer_u[]` 
@@ -348,25 +353,25 @@ void HNSW<Desc>::insert(Iter begin, Iter end, float batch_base)
 		insert_batch_impl(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end);
 		// insert(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end, false);
 
-		if(batch_end>n*(progress+0.05))
-		{
-			progress = float(batch_end)/n;
-			fprintf(stderr, "Built: %3.2f%%\n", progress*100);
-			fprintf(stderr, "# visited: %lu\n", cm::reduce(per_visited));
-			fprintf(stderr, "# eval: %lu\n", cm::reduce(per_eval));
-			fprintf(stderr, "size of C: %lu\n", cm::reduce(per_size_C));
-			per_visited.clear();
-			per_eval.clear();
-			per_size_C.clear();
-		}
+		// if(batch_end>n*(progress+0.05))
+		// {
+		// 	progress = float(batch_end)/n;
+		// 	fprintf(stderr, "Built: %3.2f%%\n", progress*100);
+		// 	fprintf(stderr, "# visited: %lu\n", cm::reduce(per_visited));
+		// 	fprintf(stderr, "# eval: %lu\n", cm::reduce(per_eval));
+		// 	fprintf(stderr, "size of C: %lu\n", cm::reduce(per_size_C));
+		// 	per_visited.clear();
+		// 	per_eval.clear();
+		// 	per_size_C.clear();
+		// }
 	}
 
-	fprintf(stderr, "# visited: %lu\n", cm::reduce(per_visited));
-	fprintf(stderr, "# eval: %lu\n", cm::reduce(per_eval));
-	fprintf(stderr, "size of C: %lu\n", cm::reduce(per_size_C));
-	per_visited.clear();
-	per_eval.clear();
-	per_size_C.clear();
+	// fprintf(stderr, "# visited: %lu\n", cm::reduce(per_visited));
+	// fprintf(stderr, "# eval: %lu\n", cm::reduce(per_eval));
+	// fprintf(stderr, "size of C: %lu\n", cm::reduce(per_size_C));
+	// per_visited.clear();
+	// per_eval.clear();
+	// per_size_C.clear();
 }
 
 template<class Desc>
@@ -378,9 +383,9 @@ void HNSW<Desc>::insert_batch_impl(Iter begin, Iter end)
 	seq<nid_t> nids(size_batch);
 	seq<seq<nid_t>> eps(size_batch);
 
-	per_visited.resize(size_batch);
-	per_eval.resize(size_batch);
-	per_size_C.resize(size_batch);
+	// per_visited.resize(size_batch);
+	// per_eval.resize(size_batch);
+	// per_size_C.resize(size_batch);
 
 	// before the insertion, prepare the needed data
 	// `nids[i]` is the nid of the node corresponding to the i-th 
@@ -481,7 +486,7 @@ void HNSW<Desc>::insert_batch_impl(Iter begin, Iter end)
 			auto search_layer = [&](const auto &g) -> decltype(auto){
 				search_control ctrl; // TODO: use designated initializers in C++20
 				ctrl.log_per_stat = i;
-				return algo::beamSearch(gen_f_nbhs(g), gen_f_dist(u), eps_u, efc, ctrl);
+				return algo::beamSearch(gen_f_nbhs(g), gen_f_dist(u), eps_u, efc, ctrl).first;
 			};
 			seq<conn> res = l==0? search_layer(layer_b): search_layer(layer_u[l]);
 
@@ -574,7 +579,7 @@ Seq HNSW<Desc>::search_layer_to(
 		search_control c{};
 		c.log_per_stat = ctrl.log_per_stat; // whether count dist calculations at all layers
 		// c.limit_eval = ctrl.limit_eval; // whether apply the limit to all layers
-		const auto W = beamSearch(gen_f_nbhs(layer_u[l]), gen_f_dist(cq), eps, ef, c);
+		const auto W = algo::beamSearch(gen_f_nbhs(layer_u[l]), gen_f_dist(cq), eps, ef, c).first;
 		eps.clear();
 		eps.push_back(W[0].u);
 		/*
@@ -613,7 +618,7 @@ Seq HNSW<Desc>::search(
 		eps.push_back(*ctrl.indicate_ep);
 	else
 		eps = search_layer_to(cq, 1, 0, ctrl);
-	auto nbhs = beamSearch(gen_f_nbhs(layer_b), gen_f_dist(cq), eps, ef, ctrl);
+	auto nbhs = algo::beamSearch(gen_f_nbhs(layer_b), gen_f_dist(cq), eps, ef, ctrl).first;
 
 	nbhs = algo::prune_simple(std::move(nbhs), k/*, ctrl*/); // TODO: set ctrl
 	cm::sort(nbhs.begin(), nbhs.end());
