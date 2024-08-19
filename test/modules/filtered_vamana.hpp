@@ -18,13 +18,14 @@
 
 using ANN::filtered_vamana;
 
-template<typename U, typename L>
+template<class U, class S1, class S2, class S3>
 void run_filtered_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, float batch_base,
                          uint32_t k, uint32_t ef, size_t size_init, size_t size_step,
-                         size_t size_max, auto ps, auto q, auto F_b,
-                         auto P_b, auto F_q, /*auto P_q,*/ bool specificity = false) {
+                         size_t size_max, const S1 &ps, const S1 &q, const S2 &F_b, const S3 &P_b,
+                         const S2 &F_q, bool specificity = false) {
   using nid_t = typename filtered_vamana<U>::nid_t;
   using pid_t = typename filtered_vamana<U>::pid_t;
+  using label_t = typename filtered_vamana<U>::label_t;
 
   filtered_vamana<U> g(dim, m, efc, alpha);
   constexpr bool filtered = true;
@@ -37,37 +38,47 @@ void run_filtered_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
     std::vector<nid_t> M(n);
 
     parlay::parallel_for(0, n, [&](size_t i) {
-      const std::vector<L> &F = F_q[i];
+      const std::vector<label_t> &F = F_q[i];
       size_t m = F.size();
-      auto f_dist = g.gen_f_dist(q[i].get_coord());
+      // auto f_dist = g.gen_f_dist(q[i].get_coord());
       std::vector<pid_t> temp(m);
 
       parlay::parallel_for(0, m, [&](size_t j) {
-        L f = F[j];
+        label_t f = F[j];
         pid_t minv = n;
         if (P_b.find(f) != P_b.end()) {
-          const std::vector<pid_t> p = P_b[f];
-          for (const pid_t &v : p) {
-            const auto d = f_dist(v);
-            if (minv == n || d < f_dist(minv)) {
-              minv = v;
-            }
-          }
+          // const std::vector<pid_t> p = P_b[f];
+          const std::vector<pid_t> p = const_cast<const S3&>(P_b).at(f);
+          minv = *p.begin();
+          // for (const pid_t &v : p) {
+          //   const auto d = f_dist(v);
+          //   if (minv == n || d < f_dist(minv)) {
+          //     minv = v;
+          //   }
+          // }
         }
         temp[j] = minv;
       });
 
       pid_t minv = n;
       for (const pid_t &v : temp) {
-        const auto d = f_dist(v);
-        if (minv == n || d < f_dist(minv)) {
+        // const auto d = f_dist(v);
+        // if (minv == n || d < f_dist(minv)) {
+        //   minv = v;
+        // }
+        if (v != n) {
           minv = v;
+          break;
         }
       }
 
       M[i] = g.id_map.get_nid(minv);
     });
 
+    std::sort(M.begin(), M.end());
+    M.erase(std::unique(M.begin(), M.end()), M.end());
+    M.erase(std::remove(M.begin(), M.end(), n), M.end());
+    
     return M;
   };
 
@@ -78,12 +89,10 @@ void run_filtered_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
     printf("Increasing size from %lu to %lu\n", size_last, size_curr);
 
     puts("Insert points");
-    parlay::internal::timer t("run_test:insert", true);
-
     auto ins_begin = ps.begin() + size_last;
     auto ins_end = ps.begin() + size_curr;
 
-    auto insert_labels = ANN::util::to<decltype(F_b)>(
+    const auto &insert_labels = ANN::util::to<S2>(
         std::ranges::subrange(F_b.begin() + size_last, F_b.begin() + size_curr));
 
     g.insert(ins_begin, ins_end, insert_labels, batch_base, filtered);
@@ -96,18 +105,18 @@ void run_filtered_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
 
   t.next("Finish insertion");
 
-  std::vector<L> qLs = filtered_vamana<U>::get_specificity(P_b);
+  std::vector<label_t> qLs = filtered_vamana<U>::get_specificity(P_b);
 
   if (specificity) {
     for (size_t i = 0; i < 5; ++i) {
       size_t j = 4 - i;
       printf("\n### Specificity: %ld pc.\n", (j == 0 ? 1 : j * 25));
 
-      L qL = qLs[j];
-      size_t n = P_b[qL].size();
+      label_t qL = qLs[j];
+      const size_t n = const_cast<const S3&>(P_b).at(qL).size();
       printf("Label [%u]: |Pf|/|P| = %.3f\n", qL, n / (float)size_max);
 
-      std::vector<std::vector<L>> query_labels(n, std::vector<L>(1, qL));
+      std::vector<std::vector<label_t>> query_labels(n, std::vector<label_t>(1, qL));
 
       puts("Search for neighbors");
       auto res = find_nbhs(g, q, k, ef, query_labels, filtered);
@@ -119,7 +128,7 @@ void run_filtered_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
       puts("Compute recall");
       calc_recall(q, res, gt, k);
     }
-    puts("--------------------------------");
+    puts("--------------------------------\n");
   } else {
     puts("Search for neighbors");
     g.entrance.clear();
@@ -136,6 +145,6 @@ void run_filtered_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
     puts("Compute recall");
     calc_recall(q, res, gt, k);
 
-    puts("--------------------------------");
+    puts("--------------------------------\n");
   }
 }

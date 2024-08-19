@@ -46,7 +46,11 @@ class filtered_hnsw : public HNSW<Desc> {
   using result_t = typename HNSW<Desc>::result_t;
 
  private:
-  using node_lite = typename HNSW<Desc>::node_lite;
+  // using node_lite = typename HNSW<Desc>::node_lite;
+  struct node_lite {
+    coord_t &get_coord();              // not in use
+    const coord_t &get_coord() const;  // not in use
+  };
 
   struct node_fat {
     uint32_t level;
@@ -56,18 +60,17 @@ class filtered_hnsw : public HNSW<Desc> {
     coord_t &get_coord() {
       return coord;
     }
-
     const coord_t &get_coord() const {
       return coord;
     }
-
     const std::vector<label_t> &get_label() const {
       return labels;
     }
   };
 
-  using graph_lite = typename HNSW<Desc>::graph_lite;
-  using graph_fat = typename Desc::graph_map_t<nid_t, node_fat, edge>;
+  // using graph_lite = typename HNSW<Desc>::graph_lite;
+  using graph_lite = typename Desc::graph_aux<nid_t, node_lite, edge>;
+  using graph_fat = typename Desc::graph_aux<nid_t, node_fat, edge>;
 
  public:
   template<typename T>
@@ -78,7 +81,7 @@ class filtered_hnsw : public HNSW<Desc> {
  public:
   filtered_hnsw(uint32_t dim, float m_l = 0.4, uint32_t m = 100, uint32_t efc = 50,
                 float alpha = 1.0)
-      : HNSW<Desc>(dim, m_l, m, efc, alpha), dim(dim), m(m), efc(efc), alpha(alpha) {}
+      : HNSW<Desc>(dim, m_l, m, efc, alpha), dim(dim), m_l(m_l), m(m), efc(efc), alpha(alpha) {}
 
  public:
   template<typename Iter>
@@ -134,8 +137,7 @@ class filtered_hnsw : public HNSW<Desc> {
     // static thread_local std::hash<std::thread::id> h;
     // static thread_local std::mt19937 gen{h(std::this_thread::get_id())};
     static thread_local std::mt19937 gen{cm::worker_id()};
-    static thread_local std::uniform_real_distribution<> dis(std::numeric_limits<float>::min(),
-                                                             1.0);
+    static thread_local std::uniform_real_distribution<> dis(std::numeric_limits<float>::min(), 1.0);
     const uint32_t res = uint32_t(-log(dis(gen)) * m_l);
     return res;
   }
@@ -186,6 +188,73 @@ class filtered_hnsw : public HNSW<Desc> {
     return [&](nid_t u) -> decltype(auto) {
       return layer_b.get_node(u)->get_label();
     };
+  }
+
+  template<class Op>
+  auto calc_degs(uint32_t l, Op op) const {
+    auto impl = [&](const auto &g) {
+      seq<size_t> degs(cm::num_workers(), 0);
+      g.for_each([&](auto p) {
+        auto &deg = degs[cm::worker_id()];
+        deg = op(deg, g.get_edges(p).size());
+      });
+      return cm::reduce(degs, size_t(0), op);
+    };
+    return l == 0 ? impl(layer_b) : impl(layer_u[l]);
+  }
+
+ public:
+  uint32_t get_height(nid_t u) const {
+    return layer_b.get_node(u)->level;
+  }
+  uint32_t get_height() const {
+    return get_height(entrance[0]);  // TODO: fix the issue when being empty
+  }
+
+  size_t num_nodes(uint32_t l) const {
+    return l == 0 ? layer_b.num_nodes() : layer_u[l].num_nodes();
+  }
+
+  size_t num_edges(uint32_t l, nid_t u) const {
+    auto num_edges_impl = [u](const auto &g) {
+      return g.get_edges(u).size();
+    };
+    return num_edges_impl(l == 0 ? layer_b : layer_u[l]);
+  }
+  size_t num_edges(uint32_t l) const {
+    return calc_degs(l, std::plus<>{});
+  }
+
+  size_t max_deg(uint32_t l) const {
+    return calc_degs(l, [](size_t x, size_t y) {
+      return std::max(x, y);
+    });
+  }
+
+  auto collect_refs(uint32_t l) const {
+    auto impl = [](const auto &g) {
+      using Map = std::unordered_map<uint64_t, uint64_t>;
+      seq<Map> ref_cnt(cm::num_workers());
+      g.for_each_raw([&](const auto &e, auto *ptr, auto r) {
+        (void)r;
+        auto &counter = ref_cnt[cm::worker_id()];
+        // uint64_t id = (uintptr_t(ptr)<<32) | std::get<0>(e);
+        uint64_t id = uintptr_t(ptr);
+        const auto &[key, val] = e;
+        const auto *ptr_el = val.get_edges_raw().data();
+        // uint64_t id = uintptr_t(ptr_el);
+        const auto size_el = val.get_edges().size();
+        counter[id] = (uintptr_t(ptr_el) << 16) | size_el;
+      });
+      Map all_cnts;
+      for (auto &counter : ref_cnt) all_cnts.merge(std::move(counter));
+      return all_cnts;
+    };
+    return l == 0 ? impl(layer_b) : impl(layer_u[l]);
+  }
+
+  decltype(auto) get_nbhs(nid_t u) const {
+    return gen_f_nbhs(layer_b)(u);
   }
 };
 

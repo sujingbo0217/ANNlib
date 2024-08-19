@@ -18,10 +18,9 @@
 
 using ANN::vamana;
 
-template<typename U>
+template<class U, class Seq>
 void run_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, float batch_base, uint32_t k,
-            uint32_t ef, size_t size_init, size_t size_step, size_t size_max, const auto &ps,
-            const auto &q) {
+            uint32_t ef, size_t size_init, size_t size_step, size_t size_max, const Seq &ps, const Seq &q) {
   // decltype(ps) baseset;
   vamana<U> g(dim, m, efc, alpha);
   // std::vector<vamana<U>> snapshots;
@@ -34,8 +33,6 @@ void run_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, float batch
     printf("Increasing size from %lu to %lu\n", size_last, size_curr);
 
     puts("Insert points");
-    parlay::internal::timer t("run_test:insert", true);
-
     auto ins_begin = ps.begin() + size_last;
     auto ins_end = ps.begin() + size_curr;
 
@@ -68,5 +65,5 @@ void run_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, float batch
   puts("Compute recall");
   calc_recall(q, res, gt, k);
 
-  puts("--------------------------------");
+  puts("--------------------------------\n");
 }

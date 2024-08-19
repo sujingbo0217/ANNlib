@@ -19,13 +19,13 @@
 
 using ANN::stitched_vamana;
 
-template<typename U, typename L>
+template<class U, class S1, class S2, class S3>
 void run_stitched_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, float batch_base,
-                         uint32_t k, uint32_t ef, size_t size_init, size_t size_step,
-                         size_t size_max, auto ps, auto q, auto F_b, auto P_b, auto F_q,
-                         /*auto P_q,*/ bool specificity = false) {
+                         uint32_t k, uint32_t ef, size_t size_max, const S1 &ps, const S1 &q,
+                         const S2 &F_b, const S3 &P_b, const S2 &F_q, bool specificity = false) {
   using nid_t = typename stitched_vamana<U>::nid_t;
   using pid_t = typename stitched_vamana<U>::pid_t;
+  using label_t = typename stitched_vamana<U>::label_t;
   using seq_edge = typename stitched_vamana<U>::seq_edge;
   using seq_conn = typename stitched_vamana<U>::seq_conn;
   using prune_control = typename stitched_vamana<U>::prune_control;
@@ -110,8 +110,8 @@ void run_stitched_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
     // if (Pf.size() == 1 && Pf[0] == 0) continue;
     size_t n = Pf.size();
     printf("Number of points w/ label [%u]: %lu\n", f, n);
-    decltype(ps) new_ps(n);
-    std::vector<std::vector<L>> base_labels(n);
+    S1 new_ps(n);
+    std::vector<std::vector<label_t>> base_labels(n);
 
     parlay::parallel_for(0, n, [&](size_t i) {
       auto offset = Pf[i];
@@ -134,18 +134,19 @@ void run_stitched_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
 
   t.next("Finish construction");
 
-  std::vector<L> qLs = stitched_vamana<U>::get_specificity(P_b);
+  std::vector<label_t> qLs = stitched_vamana<U>::get_specificity(P_b);
 
   if (specificity) {
     for (size_t i = 0; i < 5; ++i) {
       size_t j = 4 - i;
       printf("\n### Specificity: %ld pc.\n", (j == 0 ? 1 : j * 25));
 
-      L qL = qLs[j];
-      size_t n = P_b[qL].size();
+      label_t qL = qLs[j];
+      // const size_t n = P_b[qL].size();
+      const size_t n = const_cast<const S3&>(P_b).at(qL).size();
       printf("Label [%u]: |Pf|/|P| = %.3f\n", qL, n / (float)size_max);
 
-      std::vector<std::vector<L>> query_labels(n, std::vector<L>(1, qL));
+      std::vector<std::vector<label_t>> query_labels(n, std::vector<label_t>(1, qL));
 
       puts("Search for neighbors");
       auto res = find_nbhs(base, q, k, ef, query_labels, filtered);
@@ -157,7 +158,7 @@ void run_stitched_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
       puts("Compute recall");
       calc_recall(q, res, gt, k);
     }
-    puts("--------------------------------");
+    puts("--------------------------------\n");
   } else {
     puts("Search for neighbors");
     auto res = find_nbhs(base, q, k, ef, F_q, filtered);
@@ -169,6 +170,6 @@ void run_stitched_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
     puts("Compute recall");
     calc_recall(q, res, gt, k);
 
-    puts("--------------------------------");
+    puts("--------------------------------\n");
   }
 }
