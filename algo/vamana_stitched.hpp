@@ -16,6 +16,9 @@
 #include <thread>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
+#include <parlay/parallel.h>
+#include <parlay/primitives.h>
 
 #include "algo/algo.hpp"
 #include "algo/vamana.hpp"
@@ -56,7 +59,7 @@ namespace ANN {
 template<class Desc>
 class stitched_vamana : public vamana<Desc> {
  public:
-  using vamana<Desc>::vamana;  // TODO: test using vamana
+  using vamana<Desc>::vamana;
   using cm = typename vamana<Desc>::cm;
 
   using nid_t = typename vamana<Desc>::nid_t;
@@ -104,7 +107,7 @@ class stitched_vamana : public vamana<Desc> {
  public:
   template<typename Iter>
   void insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F,
-              float batch_base = 2, bool filtered = false);
+              float batch_base = 2/*, bool filtered = false*/);
 
   void insert(const std::pair<pid_t, nid_t> &nid, const coord_t &coord,
               const std::vector<label_t> &F);
@@ -112,6 +115,9 @@ class stitched_vamana : public vamana<Desc> {
   template<class Seq = seq<result_t>>
   Seq search(const coord_t &cq, uint32_t k, uint32_t ef, const std::vector<label_t> &F,
              const search_control &ctrl = {}) const;
+
+  template<class Map, typename Nid = nid_t/*, typename Label = label_t*/>
+  auto find_medoid(Map P_b, const size_t n_b, float tau = 0.5) const;
 
  public:
   static seq_edge &&edge_cast(seq_conn &&cs) {
@@ -167,10 +173,8 @@ class stitched_vamana : public vamana<Desc> {
   // template<typename Iter>
   // void insert_batch_impl(Iter begin, Iter end);
   template<typename Iter>
-  void insert_batch_impl(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F,
-                         bool filtered);
+  void insert_batch_impl(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F/*, bool filtered*/);
 
-  // TODO: test using the original from vamana
  public:
   uint32_t get_deg_bound() const {
     return R;
@@ -261,7 +265,7 @@ class stitched_vamana : public vamana<Desc> {
 template<class Desc>
 template<typename Iter>
 void stitched_vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F,
-                                   float batch_base, bool filtered) {
+                                   float batch_base/*, bool filtered*/) {
   static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
   static_assert(std::is_base_of_v<std::random_access_iterator_tag,
                                   typename std::iterator_traits<Iter>::iterator_category>);
@@ -309,8 +313,7 @@ void stitched_vamana<Desc>::insert(Iter begin, Iter end, const std::vector<std::
     // insert_batch_impl(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end);
     auto subrange = std::ranges::subrange(F.begin() + batch_begin, F.begin() + batch_end);
     std::vector new_labels(subrange.begin(), subrange.end());
-    insert_batch_impl(rand_seq.begin() + batch_begin, rand_seq.begin() + batch_end, new_labels,
-                      filtered);
+    insert_batch_impl(rand_seq.begin() + batch_begin, rand_seq.begin() + batch_end, new_labels/*, filtered*/);
     // insert(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end, false);
 
     // if (batch_end > n * (progress + 0.05)) {
@@ -343,9 +346,7 @@ void stitched_vamana<Desc>::insert(const std::pair<pid_t, nid_t> &ids, const coo
 
 template<class Desc>
 template<typename Iter>
-void stitched_vamana<Desc>::insert_batch_impl(Iter begin, Iter end,
-                                              const std::vector<std::vector<label_t>> &F,
-                                              bool filtered) {
+void stitched_vamana<Desc>::insert_batch_impl(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F/*, bool filtered*/) {
   const size_t batch_size = std::distance(begin, end);
   assert(F.size() == batch_size);
   seq<nid_t> nids(batch_size);
@@ -382,8 +383,8 @@ void stitched_vamana<Desc>::insert_batch_impl(Iter begin, Iter end,
     // auto &eps_u = entrance;
     search_control sctrl;  // TODO: use designated initializers in C++20
     sctrl.log_per_stat = i;
-    sctrl.filtered = filtered;
-    sctrl.searching = false;
+    // sctrl.filtered = filtered;
+    // sctrl.searching = false;
     seq_conn res =
         algo::beamSearch(gen_f_nbhs(), gen_f_dist(u), get_f_label(), entrance, L, F[i], sctrl);
 
@@ -458,6 +459,52 @@ Seq stitched_vamana<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef,
   });
 
   return res;
+}
+
+template<class Desc>
+template<class Map, typename Nid/*, typename Label*/>
+auto stitched_vamana<Desc>::find_medoid(Map P_b, const size_t n_b, float tau) const {
+  // std::unordered_map<Nid, uint32_t> T;
+  // std::unordered_map<label_t, nid_t> M; // M mapping filters to start nodes
+  // std::vector<std::pair<Label, std::vector<Nid>>> P(P_b.begin(), P_b.end());
+  parlay::sequence<uint32_t> T(n_b, 0); // T is intended as a counter
+
+  parlay::sequence<typename decltype(P_b)::mapped_type> P(P_b.size());
+  // std::vector<std::pair<typename decltype(P_b)::key_type, typename decltype(P_b)::mapped_type>> P(P_b.begin(), P_b.end());
+  std::transform(P_b.begin(), P_b.end(), P.begin(), [](const auto& pair) {
+    return pair.second;
+  });
+
+  auto rng = std::default_random_engine{};
+  parlay::sequence<Nid> eps(P.size());
+
+  cm::parallel_for(0, P.size(), [&](size_t i) {
+    auto nids = P[i];  // vector
+    if ((size_t)(nids.size() * tau) <= 1) {
+      assert((size_t)nids[0] < n_b);
+      T[nids[0]] += 1;    //! test: non-atomic operation
+    } else {
+      auto Pf = nids;
+      std::shuffle(Pf.begin(), Pf.end(), rng);
+      const size_t m = Pf.size();
+      const size_t rdm = (size_t)(m * tau);
+      // auto choices = parlay::sequence<decltype(Pf)::value_type>(Pf.begin(), Pf.begin() + rdm);
+      auto choices = ANN::util::to<decltype(Pf)>(std::ranges::subrange(Pf.begin(), Pf.begin() + rdm));
+      Nid midx{};         // fewer chose time node nid
+      uint32_t mn = -1;   // node chose time
+      for (auto nid : choices) {
+        assert((size_t)nid < n_b);
+        if (T[nid] < mn) {
+          midx = nid;
+          mn = T[nid];
+        }
+        T[nid] += 1;   //! test: non-atomic operation
+      }
+      eps[i] = midx;
+    }
+  });
+
+  return eps;
 }
 
 }  // namespace ANN

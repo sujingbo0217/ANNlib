@@ -23,8 +23,8 @@ namespace ANN {
       bool verbose_output = false;
       bool skip_search = false;
       float beta = 1;
-      bool filtered = true;
-      bool searching = false;
+      // bool filtered = true;
+      // bool searching = false;
       std::optional<float> radius;
       std::optional<uint32_t> log_per_stat;
       std::optional<uint32_t> log_dist;
@@ -241,7 +241,8 @@ auto beamSearch(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef
     std::vector<label_t> P = f_label(pe);
     std::vector<label_t> inter;
     std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
-    if ((ctrl.filtered && !ctrl.searching) || inter.size() > 0) {
+    // if ((ctrl.filtered && !ctrl.searching) || inter.size() > 0) {
+    if (inter.size() > 0) {
       visited[cm::hash64(pe) & mask] = pe;
       const auto d = f_dist(pe);
       cand.insert({d, pe});
@@ -277,7 +278,8 @@ auto beamSearch(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef
       std::vector<label_t> P = f_label(pv);
       std::vector<label_t> inter;
       std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
-      if ((ctrl.filtered && !ctrl.searching) || inter.size() > 0) {
+      // if ((ctrl.filtered && !ctrl.searching) || inter.size() > 0) {
+      if (inter.size() > 0) {
         cand.insert({d, pv});
         workset.push_back({d, pv});
         std::push_heap(workset.begin(), workset.end());

@@ -17,14 +17,17 @@
 #include <vector>
 
 #include "algo/algo.hpp"
-// #include "algo/vamana.hpp"
-// #include "algo/vamana_filtered.hpp"
-// #include "algo/vamana_stitched.hpp"
+#include "algo/vamana.hpp"
+#include "algo/vamana_filtered.hpp"
+#include "algo/vamana_stitched.hpp"
+#include "algo/HNSW.hpp"
+#include "algo/hnsw_filtered.hpp"
 #include "benchUtils.h"
 #include "parlay.hpp"
 // #include "cpam.hpp"
 #include "dist.hpp"
 #include "graph/adj.hpp"
+#include "modules/ground_truth.hpp"
 #include "parse_points.hpp"
 #include "util/intrin.hpp"
 #include "utils.hpp"
@@ -49,9 +52,9 @@
 
 namespace ANN::external {
 
-auto def_custom_tag() {
-  return custom_tag_parlay{};
-}
+  auto def_custom_tag() {
+    return custom_tag_parlay{};
+  }
 
 }  // namespace ANN::external
 
@@ -112,6 +115,19 @@ void visit_point(const T &array, size_t dim0, size_t dim1) {
   });
 }
 
+template<typename F>
+auto parse_array(const std::string &s, F f){
+	std::stringstream ss;
+	ss << s;
+	std::string current;
+	std::vector<decltype(f((char*)NULL))> res;
+	while(std::getline(ss, current, ',')) {
+		res.push_back(f(current.c_str()));
+  }
+	std::sort(res.begin(), res.end());
+	return res;
+};
+
 template<typename U>
 void run_test(commandLine parameter)  // intend to be pass-by-value manner
 {
@@ -119,6 +135,8 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   [[maybe_unused]] const size_t size_init = parameter.getOptionLongValue("-init", 0);
   [[maybe_unused]] const size_t size_step = parameter.getOptionLongValue("-step", 0);
   size_t size_max = parameter.getOptionLongValue("-max", 0);
+  const auto &R = parse_array(parameter.getOptionValue("-R"), atoi);
+  const auto &beam = parse_array(parameter.getOptionValue("-beam"), atoi);
   const uint32_t m = parameter.getOptionIntValue("-m", 40);
   const float ml = parameter.getOptionDoubleValue("-ml", 0.4);
   const uint32_t efc = parameter.getOptionIntValue("-efc", 60);
@@ -126,7 +144,7 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   const float batch_base = parameter.getOptionDoubleValue("-b", 2);
   const char *file_query = parameter.getOptionValue("-q");
   const uint32_t k = parameter.getOptionIntValue("-k", 10);
-  const uint32_t ef = parameter.getOptionIntValue("-ef", m * 20);
+  // const uint32_t ef = parameter.getOptionIntValue("-ef", m * 20);
   // const char *vamana_type = parameter.getOptionValue("-vt");
   const char *file_label_in = parameter.getOptionValue("-lb");
   const char *file_label_query = parameter.getOptionValue("-lq");
@@ -152,6 +170,7 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   auto [q, dd] = load_point(file_query, to_point<T>);
   t.next("Load queries");
   printf("%s: [%lu,%u]\n", file_query, q.size(), dd);
+  assert(dd == dim);
 
   // parallel pre-fetch
   visit_point(ps, size_max, dim);
@@ -161,35 +180,122 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   auto [F_b, P_b, F_q, _] =
       load_label_helper<L>(uint32_t{}, file_label_in, file_label_query, size_max);
 
-  //! specificity (filtered + stitched) [uni12 50 100 zipf12 50]
-  std::cout << ">>> Filtered Vamana Specificity >>>" << std::endl;
-  run_filtered_vamana<U>(dim, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps,
-                         q, F_b, P_b, F_q, true);
-  std::cout << ">>> Stitched Vamana Specificity >>>" << std::endl;
-  run_stitched_vamana<U>(dim, m, efc, alpha, batch_base, k, ef, size_max, ps, q, F_b, P_b, F_q, true);
+  const std::vector<L> &zipf_spec_labels = {1, 2, 4, 10, 20, 50};
+  const std::vector<L> &marco_spec_labels = {50};
+  const std::vector<L> &yfcc_spec_labels = {23, 29, 89, 20, 1589};
+  std::vector<L> spec_labels;
+  
+  if (std::string(file_label_query).find("bigann") != std::string::npos || std::string(file_label_query).find("deep") != std::string::npos) {
+    spec_labels = std::move(zipf_spec_labels);
+  } else
+  if (std::string(file_label_query).find("marco") != std::string::npos) {
+    spec_labels = std::move(marco_spec_labels);
+  } else 
+  if (std::string(file_label_query).find("yfcc") != std::string::npos) {
+    spec_labels = std::move(yfcc_spec_labels);
+  } else {
+    // wrong dataset
+  }
 
-  //! performance (vamana + filtered + stitched + post vamana) [sift1m gist1m yfcc10m]
+  std::cout << "Generating Ground Truth..." << std::endl << std::endl;
+  auto gt = get_gt<U>(ps, q, dim, k);
+
   std::cout << ">>> Vamana >>>" << std::endl;
-  run_vamana<U>(dim, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q);
+  for (const uint32_t r : R) {
+    const auto &vamana_index = run_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps);
+    for (const uint32_t l : beam) {
+      std::cout << std::endl << ">>> Vamana R = " << r << ", " << "L = " << l << std::endl;
+      // run_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_init, size_step, size_max, ps, q, gt);
+      run_vamana_search(vamana_index, k, l, q, gt);
+    }
+  }
+
+  std::cout << ">>> HNSW >>>" << std::endl;
+  const auto &hnsw_index = run_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps);
+  for (const uint32_t ef : beam) {
+    std::cout << std::endl << ">>> HNSW M = " << m << ", " << "Ef = " << ef << std::endl;
+    // run_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, gt);
+    run_hnsw_search(hnsw_index, k, ef, q, gt);
+  }
+
+  //! Run specificity
+  size_t spec_labels_size = spec_labels.size();
+  parlay::sequence<decltype(F_q)> Fqs(spec_labels_size, decltype(F_q)(F_q.size()));
+  // std::vector<decltype(gt)> filtered_gts(spec_labels_size);
+  parlay::sequence<parlay::sequence<parlay::sequence<typename U::point_t::id_t>>> filtered_gts(spec_labels_size);
+  
+  std::cout << "Generating Filtered Ground Truth..." << std::endl << std::endl;
+  parlay::parallel_for(0, spec_labels_size, [&](size_t i) {
+    parlay::parallel_for(0, F_q.size(), [&](size_t j) {
+      Fqs[i][j].push_back(spec_labels[i]);
+    });
+    filtered_gts[i] = get_gt<U>(ps, q, dim, k, F_b, Fqs[i]);
+  });
+  std::cout << "Generated " << filtered_gts.size() << " Filtered Ground Truth File(s)." << std::endl << std::endl;
 
   std::cout << ">>> Filtered Vamana >>>" << std::endl;
-  run_filtered_vamana<U>(dim, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps,
-                         q, F_b, P_b, F_q, false);
+  for (const uint32_t r : R) {
+    auto filtered_vamana_index = run_filtered_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps, F_b);
+    const auto &entrance = filtered_vamana_index.find_medoid(P_b, F_b.size(), 0.2);
+    for (size_t i = 0; i < spec_labels_size; ++i) {
+      std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
+      for (const uint32_t l : beam) {
+        std::cout << std::endl << ">>> Filtered Vamana R = " << r << ", " << "L = " << l << std::endl;
+        // run_filtered_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_init, size_step, size_max, ps, q, F_b, P_b, F_q, filtered_gt, false);
+        run_filtered_vamana_search(filtered_vamana_index, entrance, k, l, q, Fqs[i], P_b, filtered_gts[i]);
+      }
+    }
+  }
 
   std::cout << ">>> Stitched Vamana >>>" << std::endl;
-  run_stitched_vamana<U>(dim, m, efc, alpha, batch_base, k, ef, size_max, ps, q, F_b, P_b, F_q, false);
+  for (const uint32_t r : R) {
+    const auto &stitched_vamana_index = run_stitched_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_max, ps, F_b, P_b);
+    const auto &entrance = stitched_vamana_index.find_medoid(P_b, F_b.size(), 0.2);
+    for (size_t i = 0; i < spec_labels_size; ++i) {
+      std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
+      for (const uint32_t l : beam) {
+        std::cout << std::endl << ">>> Stitched Vamana R = " << r << ", " << "L = " << l << std::endl;
+        // run_stitched_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_max, ps, q, F_b, P_b, F_q, filtered_gt, false);
+        run_stitched_vamana_search(stitched_vamana_index, entrance, k, l, q, Fqs[i], P_b, filtered_gts[i]);
+      }
+    }
+  }
 
   std::cout << ">>> Vamana Post Processing >>>" << std::endl;
-  run_post_vamana<U>(dim, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, F_b, F_q);
+  for (const uint32_t r : R) {
+    const auto &vamana_index = run_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps);
+    for (size_t i = 0; i < spec_labels_size; ++i) {
+      std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
+      for (const uint32_t l : beam) {
+        std::cout << std::endl << ">>> Vamana Post R = " << r << ", " << "L = " << l << std::endl;
+        // run_post_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_init, size_step, size_max, ps, q, F_b, F_q, filtered_gt);
+        run_post_vamana(vamana_index, k, l, q, F_b, Fqs[i], filtered_gts[i]);
+      }
+    }
+  }
 
-  //! other applications (hnsw + filtered hnsw + post hnsw) [sift1m gist1m yfcc10m]
-  std::cout << ">>> HNSW >>>" << std::endl;
-  run_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q);
   std::cout << ">>> Filtered HNSW >>>" << std::endl;
-  run_filtered_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max,
-                       ps, q, F_b, P_b, F_q);
+  const auto &filtered_hnsw_index = run_filtered_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps, F_b);
+  const auto &entrance = filtered_hnsw_index.find_medoid(P_b, F_b.size(), 0.5);
+  for (size_t i = 0; i < spec_labels_size; ++i) {
+    std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
+    for (const uint32_t ef : beam) {
+      std::cout << std::endl << ">>> Filtered HNSW M = " << m << ", " << "Ef = " << ef << std::endl;
+      // run_filtered_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, F_b, P_b, F_q, filtered_gt);
+      run_filtered_hnsw_search(filtered_hnsw_index, entrance, k, ef, q, Fqs[i], P_b, filtered_gts[i]);
+    }
+  }
+
   std::cout << ">>> HNSW Post Processing >>>" << std::endl;
-  run_post_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, F_b, F_q);
+  // const auto &hnsw_index = run_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps);
+  for (size_t i = 0; i < spec_labels_size; ++i) {
+    std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
+    for (const uint32_t ef : beam) {
+      std::cout << std::endl << ">>> HNSW Post M = " << m << ", " << "Ef = " << ef << std::endl;
+      // run_post_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, F_b, F_q, filtered_gt);
+      run_post_hnsw(hnsw_index, k, ef, q, F_b, Fqs[i], filtered_gts[i]);
+    }
+  }
 }
 
 int main(int argc, char **argv) {
@@ -215,10 +321,12 @@ int main(int argc, char **argv) {
 
   auto run_test_helper = [&](auto type) {  // emulate a generic lambda in C++20
     using T = decltype(type);
-    if (!strcmp(dist_func, "L2")) run_test<desc<descr_l2<T>>>(parameter);
+    if (!strcmp(dist_func, "L2")) {
+      run_test<desc<descr_l2<T>>>(parameter);
+    } else if (!strcmp(dist_func, "angular")) {
+      run_test<desc<descr_ang<T>>>(parameter);
+    }
     /*
-    else if(!strcmp(dist_func,"angular"))
-            run_test<desc<descr_ang<T>>>(parameter);
     else if(!strcmp(dist_func,"ndot"))
             run_test<desc<descr_ndot<T>>>(parameter);
     */

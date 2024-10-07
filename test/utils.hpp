@@ -152,7 +152,7 @@ auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef) {
     });
   };
 
-  puts("Warmup");
+  // puts("Warmup");
   search();
 
   parlay::internal::timer t;
@@ -186,7 +186,7 @@ auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef) {
 // For filter
 template<class G, class Seq, typename L>
 auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef,
-               const std::vector<std::vector<L>> &F, bool filtered) {
+               const std::vector<std::vector<L>> &F/*, bool filtered*/) {
   const size_t cnt_query = q.size();
   // per_visited.resize(cnt_query);
   // per_eval.resize(cnt_query);
@@ -199,13 +199,13 @@ auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef,
       ANN::algo::search_control ctrl{};
       ctrl.log_per_stat = i;
       // ctrl.beta = beta;
-      ctrl.filtered = filtered;
-      ctrl.searching = true;
+      // ctrl.filtered = filtered;
+      // ctrl.searching = true;
       res[i] = g.template search<seq_result>(q[i].get_coord(), k, ef, F[i], ctrl);
     });
   };
 
-  puts("Warmup");
+  // puts("Warmup");
   search();
 
   parlay::internal::timer t;
@@ -257,15 +257,15 @@ auto post_processing(const G &g, const Seq &q, uint32_t k, uint32_t ef,
         std::vector<L> inter;
         std::set_intersection(F_b[pid].begin(), F_b[pid].end(), F_q[i].begin(), F_q[i].end(),
                               std::back_inserter(inter));
-        if (inter.size() <= 0) {
-          valid.push_back({std::numeric_limits<decltype(dist)>::max(), pid});
+        if (inter.size() > 0) {
+          valid.push_back({dist, pid});
         }
       }
-      res[i] = valid;
+      res[i] = std::move(valid);
     });
   };
 
-  puts("Warmup");
+  // puts("Warmup");
   search();
 
   parlay::internal::timer t;
@@ -383,7 +383,8 @@ void calc_recall(const S1 &q, const S2 &res, const S3 &gt, uint32_t k) {
     uint32_t cnt_shot = 0;
     for (uint32_t j = 0; j < k; ++j) {
       if (std::find_if(res[i].begin(), res[i].end(), [&](const auto &p) {
-            return p.dist != std::numeric_limits<decltype(p.dist)>::max() && p.pid == gt[i][j];
+            // return p.dist != std::numeric_limits<decltype(p.dist)>::max() && p.pid == gt[i][j];
+            return p.pid == gt[i][j];
           }) != res[i].end()) {
         cnt_shot++;
       }

@@ -288,7 +288,7 @@ inline auto load_point(const char *input_name, Conv converter, size_t max_num = 
   throw std::invalid_argument("Unsupported input spec");
 }
 
-// TODO: load labels from binary files
+// load labels from binary files
 template<typename L = uint32_t, typename pid_t = uint32_t>
 inline std::pair<std::vector<std::vector<L>>,
                  std::variant<std::unordered_map<L, std::vector<pid_t>>,
@@ -307,7 +307,8 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
 
   for (uint32_t i = 0; i < num_points; ++i) {
     std::vector<L> node_labels;
-    while (*data_ptr != std::numeric_limits<uint32_t>::max()) {
+    // while (*data_ptr != std::numeric_limits<uint32_t>::max() - 1) {
+    while (*data_ptr != 0) {
       L label = *data_ptr++;
       node_labels.push_back(label);
       P[label].push_back(static_cast<pid_t>(i));
@@ -362,6 +363,10 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
   std::cout << std::fixed << std::setprecision(2)
             << "Filters per Point: " << (float)total_labels / (float)num_points << std::endl;
 
+  if (!ret_pair) {
+    return std::make_pair(F, P);
+  }
+  
   std::vector<std::pair<L, std::vector<pid_t>>> pairs(P.begin(), P.end());
 
   std::sort(
@@ -370,18 +375,18 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
         return a.second.size() > b.second.size();
       });
 
-  if (ret_pair) {
-    std::reverse(pairs.begin(), pairs.end());
-    return std::make_pair(F, pairs);
-  }
+  // if (ret_pair) {
+  std::reverse(pairs.begin(), pairs.end());
+  return std::make_pair(F, pairs);
+  // }
 
-  P.clear();
-  // P = std::unordered_map<L, std::vector<pid_t>>(pairs.rbegin(), pairs.rend());
-  for (const auto &it : pairs) {
-    P.insert(it);
-  }
+  // P.clear();
+  // // P = std::unordered_map<L, std::vector<pid_t>>(pairs.rbegin(), pairs.rend());
+  // for (const auto &it : pairs) {
+  //   P.insert(it);
+  // }
 
-  return std::make_pair(F, P);
+  // return std::make_pair(F, P);
 }
 
 #endif  // __TEST_PARSE_POINTS__

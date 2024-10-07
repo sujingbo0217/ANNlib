@@ -20,9 +20,9 @@
 using ANN::stitched_vamana;
 
 template<class U, class S1, class S2, class S3>
-void run_stitched_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, float batch_base,
-                         uint32_t k, uint32_t ef, size_t size_max, const S1 &ps, const S1 &q,
-                         const S2 &F_b, const S3 &P_b, const S2 &F_q, bool specificity = false) {
+auto run_stitched_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float alpha,
+                                float batch_base, size_t size_max, const S1 &ps, const S2 &F_b,
+                                const S3 &P_b) {
   using nid_t = typename stitched_vamana<U>::nid_t;
   using pid_t = typename stitched_vamana<U>::pid_t;
   using label_t = typename stitched_vamana<U>::label_t;
@@ -30,6 +30,7 @@ void run_stitched_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
   using seq_conn = typename stitched_vamana<U>::seq_conn;
   using prune_control = typename stitched_vamana<U>::prune_control;
   using cm = typename stitched_vamana<U>::cm;
+  // constexpr bool filtered = false;
 
   auto Merge = [alpha, size_max](stitched_vamana<U> from, stitched_vamana<U> &to) -> void {
     // entrance point set update
@@ -95,18 +96,22 @@ void run_stitched_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
     to.g.set_edges(std::move(nbh_existed));
   };
 
-  const size_t n_unique_label = P_b.size();
-  stitched_vamana<U> base(dim, m * 2, efc * 2, alpha);
-  constexpr bool filtered = false;
-  // std::vector<stitched_vamana<U>> snapshots;
+  std::vector<std::pair<label_t, std::vector<nid_t>>> Pb(P_b.begin(), P_b.end());
+  sort(Pb.begin(), Pb.end(),
+       [&](const std::pair<label_t, std::vector<nid_t>> &a,
+           const std::pair<label_t, std::vector<nid_t>> &b) {
+         return a.second.size() < b.second.size();
+       });
+  const size_t n_unique_label = Pb.size();
+  stitched_vamana<U> base(dim, m + 32, efc + 50, alpha);  // R = R_small + 32, L = L_small + 50
 
   puts("Initialize Stitched Vamana");
   size_t idx = 0;
 
-  puts("Insert points");
+  // puts("Insert points");
   parlay::internal::timer t;
 
-  for (const auto &[f, Pf] : P_b) {
+  for (const auto &[f, Pf] : Pb) {
     // if (Pf.size() == 1 && Pf[0] == 0) continue;
     size_t n = Pf.size();
     printf("Number of points w/ label [%u]: %lu\n", f, n);
@@ -123,53 +128,36 @@ void run_stitched_vamana(uint32_t dim, uint32_t m, uint32_t efc, float alpha, fl
     auto ins_end = new_ps.end();
 
     stitched_vamana<U> g(dim, m, efc, alpha);
-    g.insert(ins_begin, ins_end, base_labels, batch_base, filtered);
+    g.insert(ins_begin, ins_end, base_labels, batch_base /*, filtered*/);
 
     Merge(g, base);
     printf("Inserted points w/ label: %lu/%lu\n", ++idx, n_unique_label);
-
-    puts("Collect statistics");
-    print_stat(base);
   }
+
+  puts("Collect statistics");
+  print_stat(base);
 
   t.next("Finish construction");
 
-  std::vector<label_t> qLs = stitched_vamana<U>::get_specificity(P_b);
+  return base;
+}
 
-  if (specificity) {
-    for (size_t i = 0; i < 5; ++i) {
-      size_t j = 4 - i;
-      printf("\n### Specificity: %ld pc.\n", (j == 0 ? 1 : j * 25));
+template<class G, class E, class S1, class S2, class S3, class GT>
+void run_stitched_vamana_search(G g, const E &medoid, uint32_t k, uint32_t ef, const S1 &q,
+                                const S2 &F_q, const S3 &P_b, const GT &gt) {
+  // constexpr bool filtered = false;
+  parlay::internal::timer t;
 
-      label_t qL = qLs[j];
-      // const size_t n = P_b[qL].size();
-      const size_t n = const_cast<const S3&>(P_b).at(qL).size();
-      printf("Label [%u]: |Pf|/|P| = %.3f\n", qL, n / (float)size_max);
+  puts("Search for neighbors");
+  g.entrance.clear();
+  // auto medoid = g.template find_medoid(P_b, 0.2);
+  g.entrance =
+      ANN::util::to<decltype(g.entrance)>(std::ranges::subrange(medoid.begin(), medoid.end()));
+  auto res = find_nbhs(g, q, k, ef, F_q /*, filtered*/);
+  t.next("Finish searching");
 
-      std::vector<std::vector<label_t>> query_labels(n, std::vector<label_t>(1, qL));
+  puts("Compute recall");
+  calc_recall(q, res, gt, k);
 
-      puts("Search for neighbors");
-      auto res = find_nbhs(base, q, k, ef, query_labels, filtered);
-      t.next("Finish searching");
-
-      puts("Generate groundtruth");
-      auto gt = ConstructKnng<U>(ps, q, dim, k, F_b, query_labels);
-
-      puts("Compute recall");
-      calc_recall(q, res, gt, k);
-    }
-    puts("--------------------------------\n");
-  } else {
-    puts("Search for neighbors");
-    auto res = find_nbhs(base, q, k, ef, F_q, filtered);
-    t.next("Finish searching");
-
-    puts("Generate groundtruth");
-    auto gt = ConstructKnng<U>(ps, q, dim, k, F_b, F_q);
-
-    puts("Compute recall");
-    calc_recall(q, res, gt, k);
-
-    puts("--------------------------------\n");
-  }
+  puts("--------------------------------\n");
 }
