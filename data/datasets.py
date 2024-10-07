@@ -20,7 +20,7 @@ from dataset_io import (
 )
 
 
-BASEDIR = "data/"
+BASEDIR = "/localdata/jsu068/"
 
 
 class Dataset():
@@ -343,7 +343,7 @@ class YFCC100MDataset(DatasetCompetitionFormat):
 
             # data is uploaded but download script not ready.
         self.base_url = "https://dl.fbaipublicfiles.com/billion-scale-ann-benchmarks/yfcc100M/"
-        self.basedir = os.path.join(BASEDIR, "yfcc100M")
+        self.basedir = os.path.join(BASEDIR, "yfcc")
 
         self.private_nq = 100000
         self.private_qs_url = self.base_url + self.qs_private_fn

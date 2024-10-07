@@ -47,7 +47,7 @@ def main():
 
     data = []
     if args.distribution_type == 'zipf':
-        zipf = ZipfDistribution(num_points, num_labels)
+        zipf = ZipfDistribution(num_points, num_labels, distribution_factor=1.0)
         data = zipf.generate_distribution()
     elif args.distribution_type == 'random':
         rng = default_rng()
@@ -69,7 +69,8 @@ def main():
 
     assert(len(data) == num_points)
     total_labels = 0
-    separator = np.iinfo(np.uint32).max
+    # separator = np.iinfo(np.uint32).max
+    separator = 0
 
     ###
     from collections import defaultdict
