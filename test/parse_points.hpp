@@ -360,6 +360,7 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
   // file.close();
 
   std::cout << "Total labels: " << total_labels << std::endl;
+  std::cout << "Total label values: " << P.size() << std::endl;
   std::cout << std::fixed << std::setprecision(2)
             << "Filters per Point: " << (float)total_labels / (float)num_points << std::endl;
 

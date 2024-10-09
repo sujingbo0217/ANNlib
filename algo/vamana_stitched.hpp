@@ -116,9 +116,6 @@ class stitched_vamana : public vamana<Desc> {
   Seq search(const coord_t &cq, uint32_t k, uint32_t ef, const std::vector<label_t> &F,
              const search_control &ctrl = {}) const;
 
-  template<class Map, typename Nid = nid_t/*, typename Label = label_t*/>
-  auto find_medoid(Map P_b, const size_t n_b, float tau = 0.5) const;
-
  public:
   static seq_edge &&edge_cast(seq_conn &&cs) {
     return reinterpret_cast<seq_edge &&>(std::move(cs));
@@ -459,52 +456,6 @@ Seq stitched_vamana<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef,
   });
 
   return res;
-}
-
-template<class Desc>
-template<class Map, typename Nid/*, typename Label*/>
-auto stitched_vamana<Desc>::find_medoid(Map P_b, const size_t n_b, float tau) const {
-  // std::unordered_map<Nid, uint32_t> T;
-  // std::unordered_map<label_t, nid_t> M; // M mapping filters to start nodes
-  // std::vector<std::pair<Label, std::vector<Nid>>> P(P_b.begin(), P_b.end());
-  parlay::sequence<uint32_t> T(n_b, 0); // T is intended as a counter
-
-  parlay::sequence<typename decltype(P_b)::mapped_type> P(P_b.size());
-  // std::vector<std::pair<typename decltype(P_b)::key_type, typename decltype(P_b)::mapped_type>> P(P_b.begin(), P_b.end());
-  std::transform(P_b.begin(), P_b.end(), P.begin(), [](const auto& pair) {
-    return pair.second;
-  });
-
-  auto rng = std::default_random_engine{};
-  parlay::sequence<Nid> eps(P.size());
-
-  cm::parallel_for(0, P.size(), [&](size_t i) {
-    auto nids = P[i];  // vector
-    if ((size_t)(nids.size() * tau) <= 1) {
-      assert((size_t)nids[0] < n_b);
-      T[nids[0]] += 1;    //! test: non-atomic operation
-    } else {
-      auto Pf = nids;
-      std::shuffle(Pf.begin(), Pf.end(), rng);
-      const size_t m = Pf.size();
-      const size_t rdm = (size_t)(m * tau);
-      // auto choices = parlay::sequence<decltype(Pf)::value_type>(Pf.begin(), Pf.begin() + rdm);
-      auto choices = ANN::util::to<decltype(Pf)>(std::ranges::subrange(Pf.begin(), Pf.begin() + rdm));
-      Nid midx{};         // fewer chose time node nid
-      uint32_t mn = -1;   // node chose time
-      for (auto nid : choices) {
-        assert((size_t)nid < n_b);
-        if (T[nid] < mn) {
-          midx = nid;
-          mn = T[nid];
-        }
-        T[nid] += 1;   //! test: non-atomic operation
-      }
-      eps[i] = midx;
-    }
-  });
-
-  return eps;
 }
 
 }  // namespace ANN

@@ -209,7 +209,7 @@ auto find_nbhs(const G &g, const Seq &q, uint32_t k, uint32_t ef,
   search();
 
   parlay::internal::timer t;
-  const uint32_t rounds = 5;
+  const uint32_t rounds = 3;
   for (uint32_t i = 0; i < rounds; ++i) search();
   const double time_query = t.next_time() / rounds;
   const double qps = cnt_query / time_query;
@@ -417,4 +417,50 @@ inline auto load_label_helper(auto type, const char *file_label_in, const char *
   printf("Load %lu query points w/ labels\n\n", F_q.size());
 
   return std::make_tuple(F_b, P_b, F_q, P_q);
+}
+
+template<class Map, typename Nid = uint32_t>
+auto find_medoid(Map P_b, const size_t n_b, float tau = 0.5) {
+  // std::unordered_map<Nid, uint32_t> T;
+  // std::unordered_map<label_t, nid_t> M; // M mapping filters to start nodes
+  // std::vector<std::pair<Label, std::vector<Nid>>> P(P_b.begin(), P_b.end());
+
+  parlay::sequence<uint32_t> T(n_b, 0); // T is intended as a counter
+  parlay::sequence<typename decltype(P_b)::mapped_type> P(P_b.size());
+  // std::vector<std::pair<typename decltype(P_b)::key_type, typename decltype(P_b)::mapped_type>> P(P_b.begin(), P_b.end());
+  std::transform(P_b.begin(), P_b.end(), P.begin(), [](const auto& pair) {
+    return pair.second;
+  });
+
+  auto rng = std::default_random_engine{};
+  parlay::sequence<Nid> eps(P.size());
+
+  parlay::parallel_for(0, P.size(), [&](size_t i) {
+    auto nids = P[i];  // vector
+    if ((size_t)(nids.size() * tau) <= 1) {
+      assert((size_t)nids[0] < n_b);
+      T[nids[0]] += 1;    //! test: non-atomic operation
+    } else {
+      auto Pf = nids;
+      std::shuffle(Pf.begin(), Pf.end(), rng);
+      const size_t m = Pf.size();
+      const size_t rdm = (size_t)(m * tau);
+      // auto choices = parlay::sequence<decltype(Pf)::value_type>(Pf.begin(), Pf.begin() + rdm);
+      auto choices = ANN::util::to<decltype(Pf)>(std::ranges::subrange(Pf.begin(), Pf.begin() + rdm));
+      Nid midx{};         // fewer chose time node nid
+      uint32_t mn = -1;   // node chose time
+      for (auto nid : choices) {
+        assert((size_t)nid < n_b);
+        if (T[nid] < mn) {
+          midx = nid;
+          mn = T[nid];
+        }
+        T[nid] += 1;   //! test: non-atomic operation
+      }
+      eps[i] = midx;
+    }
+  });
+
+  std::cout << "Entrance Points Found." << std::endl;
+  return eps;
 }

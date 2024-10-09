@@ -224,7 +224,7 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   // std::vector<decltype(gt)> filtered_gts(spec_labels_size);
   parlay::sequence<parlay::sequence<parlay::sequence<typename U::point_t::id_t>>> filtered_gts(spec_labels_size);
   
-  std::cout << "Generating Filtered Ground Truth..." << std::endl << std::endl;
+  std::cout << "Generating Filtered Ground Truth..." << std::endl;
   parlay::parallel_for(0, spec_labels_size, [&](size_t i) {
     parlay::parallel_for(0, F_q.size(), [&](size_t j) {
       Fqs[i][j].push_back(spec_labels[i]);
@@ -235,8 +235,8 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
 
   std::cout << ">>> Filtered Vamana >>>" << std::endl;
   for (const uint32_t r : R) {
-    auto filtered_vamana_index = run_filtered_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps, F_b);
-    const auto &entrance = filtered_vamana_index.find_medoid(P_b, F_b.size(), 0.2);
+    const auto &entrance = find_medoid(P_b, F_b.size(), 0.2);
+    auto filtered_vamana_index = run_filtered_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps, F_b, entrance);
     for (size_t i = 0; i < spec_labels_size; ++i) {
       std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
       for (const uint32_t l : beam) {
@@ -249,8 +249,8 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
 
   std::cout << ">>> Stitched Vamana >>>" << std::endl;
   for (const uint32_t r : R) {
+    const auto &entrance = find_medoid(P_b, F_b.size(), 0.2);
     const auto &stitched_vamana_index = run_stitched_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_max, ps, F_b, P_b);
-    const auto &entrance = stitched_vamana_index.find_medoid(P_b, F_b.size(), 0.2);
     for (size_t i = 0; i < spec_labels_size; ++i) {
       std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
       for (const uint32_t l : beam) {
@@ -275,8 +275,8 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   }
 
   std::cout << ">>> Filtered HNSW >>>" << std::endl;
-  const auto &filtered_hnsw_index = run_filtered_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps, F_b);
-  const auto &entrance = filtered_hnsw_index.find_medoid(P_b, F_b.size(), 0.5);
+  const auto &entrance = find_medoid(P_b, F_b.size(), 0.5);
+  const auto &filtered_hnsw_index = run_filtered_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps, F_b, entrance);
   for (size_t i = 0; i < spec_labels_size; ++i) {
     std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
     for (const uint32_t ef : beam) {
@@ -287,7 +287,7 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   }
 
   std::cout << ">>> HNSW Post Processing >>>" << std::endl;
-  // const auto &hnsw_index = run_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps);
+  const auto &hnsw_index = run_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps);
   for (size_t i = 0; i < spec_labels_size; ++i) {
     std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
     for (const uint32_t ef : beam) {
