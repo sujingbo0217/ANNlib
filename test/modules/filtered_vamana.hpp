@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <type_traits>
@@ -18,11 +19,11 @@
 
 using ANN::filtered_vamana;
 
-template<class U, class S1, class S2, class S3>
+template<class U, class E, class S1, class S2>
 auto run_filtered_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float alpha,
                                 float batch_base, size_t size_init, size_t size_step,
-                                size_t size_max, const S1 &ps, const S2 &F_b, const S3 &medoid) {
-  // using nid_t = typename filtered_vamana<U>::nid_t;
+                                size_t size_max, const S1 &ps, const S2 &F_b, const E &entrance) {
+  using nid_t = typename filtered_vamana<U>::nid_t;
   // using pid_t = typename filtered_vamana<U>::pid_t;
   // using label_t = typename filtered_vamana<U>::label_t;
   // constexpr bool filtered = true;
@@ -32,20 +33,67 @@ auto run_filtered_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float al
 
   parlay::internal::timer t;
 
-  for (size_t size_last = 0, size_curr = size_init; size_curr <= size_max;
-       size_last = size_curr, size_curr += size_step) {
-    auto ins_begin = ps.begin() + size_last;
-    auto ins_end = ps.begin() + size_curr;
+  parlay::sequence<bool> used(ps.size(), false);
+  // parlay::sequence<size_t> prefix_array(ps.size(), 0);
 
-    const auto &insert_labels =
-        ANN::util::to<S2>(std::ranges::subrange(F_b.begin() + size_last, F_b.begin() + size_curr));
+  std::set<nid_t> s(entrance.begin(), entrance.end());
+  E medoid(s.begin(), s.end());
 
-    g.entrance.clear();
-    g.entrance =
-        ANN::util::to<decltype(g.entrance)>(std::ranges::subrange(medoid.begin(), medoid.end()));
-    g.insert(ins_begin, ins_end, insert_labels, batch_base /*, filtered*/);
-    std::cout << "Insert from " << size_last << " to " << size_curr << std::endl;
-  }
+  const size_t N = medoid.size();
+  const size_t M = ps.size() - medoid.size();
+
+  // TODO: entrance points insertion
+  S1 eps(N);
+  S2 l_eps(N);
+
+  std::cout << "Assign entrance points and their labels" << std::endl;
+  parlay::parallel_for(0, N, [&](size_t i) {
+    auto offset = medoid[i];
+    assert(offset < ps.size());
+    eps[i] = ps[offset];
+    l_eps[i] = F_b[offset];
+    used[offset] = true;
+    // prefix_array[i] = 1;
+  });
+
+  // insert entrance points
+  std::cout << "Insert entrance points to index" << std::endl;
+  g.insert(eps.begin(), eps.end(), l_eps, batch_base /*, filtered*/);
+  
+  // calculate prefix sum
+  // auto prefix_sum = parlay::scan_inclusive(prefix_array);
+
+  // TODO: remaining points insertion
+  S1 rem(M);
+  S2 l_rem(M);
+
+  // remaining point indices
+  auto remaining_indices = parlay::filter(parlay::iota(M), [&](size_t i) {
+    // return prefix_array[i] == 0;
+    return !used[i];
+  });
+
+  std::cout << "Assign remaining points and their labels" << std::endl;
+  parlay::parallel_for(0, M, [&](size_t i) {
+    size_t j = remaining_indices[i];
+    rem[i] = ps[j];
+    l_rem[i] = F_b[j];
+  });
+
+  // for (size_t size_last = 0, size_curr = size_init; size_curr < rem.size(); size_last = size_curr, size_curr += size_step) {
+  //   auto ins_begin = rem.begin() + size_last;
+  //   auto ins_end = rem.begin() + size_curr;
+  //   const auto &insert_labels =
+  //       ANN::util::to<S2>(std::ranges::subrange(l_rem.begin() + size_last, l_rem.begin() + size_curr));
+
+  //   // insert remaining points
+  //   std::cout << "Inserting remaining points to the index..." << std::endl;
+  //   g.insert(ins_begin, ins_end, insert_labels, batch_base /*, filtered*/);
+  // }
+
+  // insert remaining points
+  std::cout << "Insert remaining points to index" << std::endl;
+  g.insert2(rem.begin(), rem.end(), l_rem, entrance, batch_base/*, filtered*/);
 
   puts("Collect statistics");
   print_stat(g);
@@ -55,9 +103,8 @@ auto run_filtered_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float al
   return g;
 }
 
-template<class G, class E, class S1, class S2, class S3, class GT>
-void run_filtered_vamana_search(G g, const E &medoid, uint32_t k, uint32_t ef, const S1 &q,
-                                const S2 &F_q, const S3 &P_b, const GT &gt) {
+template<class G, class S1, class S2, class GT>
+void run_filtered_vamana_search(G g, uint32_t k, uint32_t ef, const S1 &q, const S2 &F_q, const GT &gt) {
   // constexpr bool filtered = true;
   parlay::internal::timer t;
 

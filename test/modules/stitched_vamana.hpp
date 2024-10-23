@@ -142,17 +142,16 @@ auto run_stitched_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float al
   return base;
 }
 
-template<class G, class E, class S1, class S2, class S3, class GT>
-void run_stitched_vamana_search(G g, const E &medoid, uint32_t k, uint32_t ef, const S1 &q,
-                                const S2 &F_q, const S3 &P_b, const GT &gt) {
+template<class G, class S1, class S2, class GT>
+void run_stitched_vamana_search(G g, uint32_t k, uint32_t ef, const S1 &q, const S2 &F_q, const GT &gt) {
   // constexpr bool filtered = false;
   parlay::internal::timer t;
 
   puts("Search for neighbors");
-  g.entrance.clear();
+  // g.entrance.clear();
   // auto medoid = g.template find_medoid(P_b, 0.2);
-  g.entrance =
-      ANN::util::to<decltype(g.entrance)>(std::ranges::subrange(medoid.begin(), medoid.end()));
+  // g.entrance =
+  //     ANN::util::to<decltype(g.entrance)>(std::ranges::subrange(medoid.begin(), medoid.end()));
   auto res = find_nbhs(g, q, k, ef, F_q /*, filtered*/);
   t.next("Finish searching");
 

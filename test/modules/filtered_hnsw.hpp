@@ -31,19 +31,21 @@ auto run_filtered_hnsw_insert(uint32_t dim, float m_l, uint32_t m, uint32_t efc,
 
   parlay::internal::timer t;
 
-  for (size_t size_last = 0, size_curr = size_init; size_curr <= size_max;
-       size_last = size_curr, size_curr += size_step) {
-    auto ins_begin = ps.begin() + size_last;
-    auto ins_end = ps.begin() + size_curr;
+  // for (size_t size_last = 0, size_curr = size_init; size_curr <= size_max;
+  //      size_last = size_curr, size_curr += size_step) {
+  //   auto ins_begin = ps.begin() + size_last;
+  //   auto ins_end = ps.begin() + size_curr;
 
-    const auto& insert_labels =
-        ANN::util::to<S2>(std::ranges::subrange(F_b.begin() + size_last, F_b.begin() + size_curr));
+  //   const auto& insert_labels =
+  //       ANN::util::to<S2>(std::ranges::subrange(F_b.begin() + size_last, F_b.begin() + size_curr));
 
-    layers.entrance.clear();
-    layers.entrance = ANN::util::to<decltype(layers.entrance)>(
-        std::ranges::subrange(medoid.begin(), medoid.end()));
-    layers.insert(ins_begin, ins_end, insert_labels, batch_base);
-  }
+  //   // layers.entrance.clear();
+  //   // layers.entrance = ANN::util::to<decltype(layers.entrance)>(
+  //   //     std::ranges::subrange(medoid.begin(), medoid.end()));
+  //   layers.insert(ins_begin, ins_end, insert_labels, batch_base);
+  // }
+
+  layers.insert(ps.begin(), ps.end(), F_b, medoid, batch_base);
 
   puts("Collect statistics");
   print_layers(layers);

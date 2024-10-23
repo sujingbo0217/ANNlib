@@ -413,8 +413,8 @@ inline auto load_label_helper(auto type, const char *file_label_in, const char *
 
   auto [F_q, P_q_v] = load_label<L, pid_t>(file_label_query);
   auto P_q = std::get<std::vector<std::pair<L, std::vector<pid_t>>>>(P_q_v);
-  t.next("Load query labels");
-  printf("Load %lu query points w/ labels\n\n", F_q.size());
+  // t.next("Load query labels");
+  // printf("Load %lu query points w/ labels\n\n", F_q.size());
 
   return std::make_tuple(F_b, P_b, F_q, P_q);
 }
@@ -461,6 +461,5 @@ auto find_medoid(Map P_b, const size_t n_b, float tau = 0.5) {
     }
   });
 
-  std::cout << "Entrance Points Found." << std::endl;
   return eps;
 }

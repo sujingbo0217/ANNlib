@@ -59,7 +59,7 @@ class point {
   typedef uint32_t id_t;
   typedef T elem_t;
   typedef const elem_t *coord_t;
-  typedef uint32_t label_t;
+  typedef int32_t label_t;
 
   point() : id(~0u), coord(NULL), closure() {}
   point(uint32_t id_, const T *coord) : id(id_), coord(coord), closure() {}
@@ -289,7 +289,7 @@ inline auto load_point(const char *input_name, Conv converter, size_t max_num = 
 }
 
 // load labels from binary files
-template<typename L = uint32_t, typename pid_t = uint32_t>
+template<typename L = int32_t, typename pid_t = uint32_t>
 inline std::pair<std::vector<std::vector<L>>,
                  std::variant<std::unordered_map<L, std::vector<pid_t>>,
                               std::vector<std::pair<L, std::vector<pid_t>>>>>
@@ -299,16 +299,17 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
   const uint32_t cnt_points = *reinterpret_cast<uint32_t *>(fileptr);
   const uint32_t num_points =
       (max_size == 0 ? cnt_points : std::min<uint32_t>(max_size, cnt_points));
-  const uint32_t *data_ptr = reinterpret_cast<const uint32_t *>(fileptr + sizeof(uint32_t));
+  const L *data_ptr = reinterpret_cast<const L *>(fileptr + sizeof(L));
 
   std::vector<std::vector<L>> F(num_points);
   std::unordered_map<L, std::vector<pid_t>> P;
   size_t total_labels = 0;
+  const L separater = -1;
 
   for (uint32_t i = 0; i < num_points; ++i) {
     std::vector<L> node_labels;
     // while (*data_ptr != std::numeric_limits<uint32_t>::max() - 1) {
-    while (*data_ptr != 0) {
+    while (*data_ptr != separater) {
       L label = *data_ptr++;
       node_labels.push_back(label);
       P[label].push_back(static_cast<pid_t>(i));
@@ -359,15 +360,18 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
   // }
   // file.close();
 
-  std::cout << "Total labels: " << total_labels << std::endl;
-  std::cout << "Total label values: " << P.size() << std::endl;
-  std::cout << std::fixed << std::setprecision(2)
-            << "Filters per Point: " << (float)total_labels / (float)num_points << std::endl;
+  if (std::string(file_path).find("query") == std::string::npos) {
+    // base label file
+    std::cout << "Total labels: " << total_labels << std::endl;
+    std::cout << "Total label values: " << P.size() << std::endl;
+    std::cout << std::fixed << std::setprecision(2)
+              << "Filters per Point: " << (float)total_labels / (float)num_points << std::endl;
+  }
 
   if (!ret_pair) {
     return std::make_pair(F, P);
   }
-  
+
   std::vector<std::pair<L, std::vector<pid_t>>> pairs(P.begin(), P.end());
 
   std::sort(
@@ -376,18 +380,26 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
         return a.second.size() > b.second.size();
       });
 
-  // if (ret_pair) {
   std::reverse(pairs.begin(), pairs.end());
   return std::make_pair(F, pairs);
-  // }
+}
 
-  // P.clear();
-  // // P = std::unordered_map<L, std::vector<pid_t>>(pairs.rbegin(), pairs.rend());
-  // for (const auto &it : pairs) {
-  //   P.insert(it);
-  // }
+template<class GT>
+void write_to_bin(const char *file, const GT &gt, uint32_t dim) {
+  std::ofstream out_file(file, std::ios::binary);
+  if (!out_file) {
+    throw std::runtime_error("Could not open file for writing");
+  }
 
-  // return std::make_pair(F, P);
+  uint32_t n = gt.size();
+  out_file.write(reinterpret_cast<const char *>(&n), sizeof(n));
+  out_file.write(reinterpret_cast<const char *>(&dim), sizeof(dim));
+
+  for (const auto &it : gt) {
+    out_file.write(reinterpret_cast<const char *>(&it), sizeof(decltype(it)) * dim);
+  }
+
+  out_file.close();
 }
 
 #endif  // __TEST_PARSE_POINTS__

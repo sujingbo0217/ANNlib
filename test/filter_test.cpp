@@ -124,7 +124,7 @@ auto parse_array(const std::string &s, F f){
 	while(std::getline(ss, current, ',')) {
 		res.push_back(f(current.c_str()));
   }
-	std::sort(res.begin(), res.end());
+	// std::sort(res.begin(), res.end());
 	return res;
 };
 
@@ -146,8 +146,35 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   const uint32_t k = parameter.getOptionIntValue("-k", 10);
   // const uint32_t ef = parameter.getOptionIntValue("-ef", m * 20);
   // const char *vamana_type = parameter.getOptionValue("-vt");
+  // const char *ground_truth = parameter.getOptionValue("-gt");
+  const auto &gt_labels = parse_array(parameter.getOptionValue("-gts"), atoi);
   const char *file_label_in = parameter.getOptionValue("-lb");
   const char *file_label_query = parameter.getOptionValue("-lq");
+
+  auto gen_dir = [&](const char *dir) -> std::string {
+    std::vector<std::string> parts;
+    const std::string s(dir);
+    std::stringstream ss(s);
+    std::string part;
+    while (std::getline(ss, part, '/')) {
+      parts.push_back(part);
+    }
+    std::string res;
+    for (size_t i = 0; i < parts.size() - 1; ++i) {
+      res += parts[i];
+      res += "/";
+    }
+    return res;
+  };
+
+  std::vector<std::string> gt_paths;
+  const std::string base_dir = gen_dir(file_label_in);
+  std::string normal_gt_path = base_dir + "gt.bin";
+  gt_paths.push_back(normal_gt_path);
+  for (const auto &num : gt_labels) {
+    std::string filter_gt_path = std::format("{}L{}.gt.bin", base_dir, num);
+    gt_paths.push_back(filter_gt_path);
+  }
 
   parlay::internal::timer t("run_test:prepare", true);
 
@@ -180,122 +207,148 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
   auto [F_b, P_b, F_q, _] =
       load_label_helper<L>(uint32_t{}, file_label_in, file_label_query, size_max);
 
-  const std::vector<L> &zipf_spec_labels = {1, 2, 4, 10, 20, 50};
-  const std::vector<L> &marco_spec_labels = {50};
-  const std::vector<L> &yfcc_spec_labels = {23, 29, 89, 20, 1589};
-  std::vector<L> spec_labels;
-  
-  if (std::string(file_label_query).find("bigann") != std::string::npos || std::string(file_label_query).find("deep") != std::string::npos) {
-    spec_labels = std::move(zipf_spec_labels);
-  } else
-  if (std::string(file_label_query).find("marco") != std::string::npos) {
-    spec_labels = std::move(marco_spec_labels);
-  } else 
-  if (std::string(file_label_query).find("yfcc") != std::string::npos) {
-    spec_labels = std::move(yfcc_spec_labels);
-  } else {
-    // wrong dataset
-  }
+  auto gt_exists = [](const char *gt_path) -> bool {
+    struct stat buffer;
+    return (stat(gt_path, &buffer) == 0);
+  };
 
-  std::cout << "Generating Ground Truth..." << std::endl << std::endl;
-  auto gt = get_gt<U>(ps, q, dim, k);
+  // std::cout << "Generating Ground Truth..." << std::endl;
+  // // auto gt = (gt_paths.size() >= 1 && gt_exists(gt_paths[0]) ? load_point(gt_paths[0], gt_converter<uint32_t>{}).first : get_gt<U>(ps, q, dim, k));
+  // parlay::sequence<parlay::sequence<typename U::point_t::id_t>> gt;
+  // if (gt_paths.size() >= 1 && gt_exists(gt_paths[0].c_str())) {
+  //   std::cout << "Load ground truth from " << std::string(gt_paths[0]) << std::endl << std::endl;
+  //   try {
+  //     gt = load_point((gt_paths[0] + ":ubin").c_str(), gt_converter<uint32_t>{}).first;
+  //   } catch (const std::invalid_argument &e) {
+  //     std::cerr << e.what() << '\n';
+  //   } 
+  // } else {
+  //   std::cout << "Calculating ground truth..." << std::endl;
+  //   gt = get_gt<U>(ps, q, dim, k);
+  //   if (gt_paths.size() >= 1) {
+  //     std::cout << "Writing ground truth to " << std::string(gt_paths[0]) << "..." << std::endl << std::endl;
+  //     write_to_bin(gt_paths[0].c_str(), gt, dim);
+  //   }
+  // }
 
-  std::cout << ">>> Vamana >>>" << std::endl;
-  for (const uint32_t r : R) {
-    const auto &vamana_index = run_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps);
-    for (const uint32_t l : beam) {
-      std::cout << std::endl << ">>> Vamana R = " << r << ", " << "L = " << l << std::endl;
-      // run_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_init, size_step, size_max, ps, q, gt);
-      run_vamana_search(vamana_index, k, l, q, gt);
-    }
-  }
+  // std::cout << ">>> Vamana >>>" << std::endl;
+  // for (const uint32_t r : R) {
+  //   const auto &vamana_index = run_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps);
+  //   for (const uint32_t l : beam) {
+  //     std::cout << std::endl << ">>> Vamana R = " << r << ", " << "L = " << l << std::endl;
+  //     // run_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_init, size_step, size_max, ps, q, gt);
+  //     run_vamana_search(vamana_index, k, l, q, gt);
+  //   }
+  // }
 
-  std::cout << ">>> HNSW >>>" << std::endl;
-  const auto &hnsw_index = run_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps);
-  for (const uint32_t ef : beam) {
-    std::cout << std::endl << ">>> HNSW M = " << m << ", " << "Ef = " << ef << std::endl;
-    // run_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, gt);
-    run_hnsw_search(hnsw_index, k, ef, q, gt);
-  }
+  // std::cout << ">>> HNSW >>>" << std::endl;
+  // const auto &hnsw_index = run_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps);
+  // for (const uint32_t ef : beam) {
+  //   std::cout << std::endl << ">>> HNSW M = " << m << ", " << "Ef = " << ef << std::endl;
+  //   // run_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, gt);
+  //   run_hnsw_search(hnsw_index, k, ef, q, gt);
+  // }
 
   //! Run specificity
-  size_t spec_labels_size = spec_labels.size();
+  // TODO: Test ground truth loading and writing
+  // TODO: prefix optimization during inserting
+  const size_t spec_labels_size = gt_labels.size();
   parlay::sequence<decltype(F_q)> Fqs(spec_labels_size, decltype(F_q)(F_q.size()));
   // std::vector<decltype(gt)> filtered_gts(spec_labels_size);
   parlay::sequence<parlay::sequence<parlay::sequence<typename U::point_t::id_t>>> filtered_gts(spec_labels_size);
   
   std::cout << "Generating Filtered Ground Truth..." << std::endl;
-  parlay::parallel_for(0, spec_labels_size, [&](size_t i) {
-    parlay::parallel_for(0, F_q.size(), [&](size_t j) {
-      Fqs[i][j].push_back(spec_labels[i]);
-    });
-    filtered_gts[i] = get_gt<U>(ps, q, dim, k, F_b, Fqs[i]);
-  });
+  for (size_t i = 0; i < spec_labels_size; ++i) {
+    for (size_t j = 0; j < F_q.size(); ++j) {
+  // parlay::parallel_for(0, spec_labels_size, [&](size_t i) {
+  //   parlay::parallel_for(0, F_q.size(), [&](size_t j) {
+      Fqs[i][j].push_back(gt_labels[i]);
+    // });
+    }
+    // filtered_gts[i] = gt_paths.size() - 1 >= spec_labels_size && gt_exists(gt_paths[i + 1]) ? load_point(gt_paths[i + 1], gt_converter<uint32_t>{}).first : get_gt<U>(ps, q, dim, k, F_b, Fqs[i]);
+    if (gt_paths.size() - 1 >= spec_labels_size && gt_exists(gt_paths[i + 1].c_str())) {
+      //! print for single spec label set only!
+      std::cout << "Load ground truth from " << std::string(gt_paths[i + 1]) << std::endl << std::endl;
+      filtered_gts[i] = load_point((gt_paths[i + 1] + ":ubin").c_str(), gt_converter<uint32_t>{}).first;
+    } else {
+      //! print for single spec label set only!
+      std::cout << "Calculating ground truth..." << std::endl;
+      filtered_gts[i] = get_gt<U>(ps, q, dim, k, F_b, Fqs[i]);
+      if (gt_paths.size() - 1 >= spec_labels_size) {
+        std::cout << "Writing ground truth to " << std::string(gt_paths[i + 1]) << "..." << std::endl << std::endl;
+        write_to_bin(gt_paths[i + 1].c_str(), filtered_gts[i], dim);
+      }
+    }
+  // });
+  }
   std::cout << "Generated " << filtered_gts.size() << " Filtered Ground Truth File(s)." << std::endl << std::endl;
 
   std::cout << ">>> Filtered Vamana >>>" << std::endl;
   for (const uint32_t r : R) {
-    const auto &entrance = find_medoid(P_b, F_b.size(), 0.2);
+    const auto &entrance = find_medoid(P_b, F_b.size(), 0.1);
+    std::cout << "Entrance point size: " << entrance.size() << std::endl;
     auto filtered_vamana_index = run_filtered_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps, F_b, entrance);
     for (size_t i = 0; i < spec_labels_size; ++i) {
-      std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
+      std::cout << ">> Round: " << i + 1 << ", Label Value: " << gt_labels[i] << ", Label Num: " << P_b[gt_labels[i]].size() << std::endl;
       for (const uint32_t l : beam) {
         std::cout << std::endl << ">>> Filtered Vamana R = " << r << ", " << "L = " << l << std::endl;
         // run_filtered_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_init, size_step, size_max, ps, q, F_b, P_b, F_q, filtered_gt, false);
-        run_filtered_vamana_search(filtered_vamana_index, entrance, k, l, q, Fqs[i], P_b, filtered_gts[i]);
+        run_filtered_vamana_search(filtered_vamana_index/*, entrance*/, k, l, q, Fqs[i], filtered_gts[i]);
       }
     }
   }
 
-  std::cout << ">>> Stitched Vamana >>>" << std::endl;
-  for (const uint32_t r : R) {
-    const auto &entrance = find_medoid(P_b, F_b.size(), 0.2);
-    const auto &stitched_vamana_index = run_stitched_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_max, ps, F_b, P_b);
-    for (size_t i = 0; i < spec_labels_size; ++i) {
-      std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
-      for (const uint32_t l : beam) {
-        std::cout << std::endl << ">>> Stitched Vamana R = " << r << ", " << "L = " << l << std::endl;
-        // run_stitched_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_max, ps, q, F_b, P_b, F_q, filtered_gt, false);
-        run_stitched_vamana_search(stitched_vamana_index, entrance, k, l, q, Fqs[i], P_b, filtered_gts[i]);
-      }
-    }
-  }
+  // std::cout << ">>> Stitched Vamana >>>" << std::endl;
+  // for (const uint32_t r : R) {
+  //   // const auto &entrance = find_medoid(P_b, F_b.size(), 0.2);
+  //   // std::cout << "Entrance point size: " << entrance.size() << std::endl;
+  //   const auto &stitched_vamana_index = run_stitched_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_max, ps, F_b, P_b);
+  //   for (size_t i = 0; i < spec_labels_size; ++i) {
+  //     std::cout << ">> Round: " << i + 1 << ", Label Value: " << gt_labels[i] << ", Label Num: " << P_b[gt_labels[i]].size() << std::endl;
+  //     for (const uint32_t l : beam) {
+  //       std::cout << std::endl << ">>> Stitched Vamana R = " << r << ", " << "L = " << l << std::endl;
+  //       // run_stitched_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_max, ps, q, F_b, P_b, F_q, filtered_gt, false);
+  //       run_stitched_vamana_search(stitched_vamana_index, k, l, q, Fqs[i], P_b, filtered_gts[i]);
+  //     }
+  //   }
+  // }
 
-  std::cout << ">>> Vamana Post Processing >>>" << std::endl;
-  for (const uint32_t r : R) {
-    const auto &vamana_index = run_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps);
-    for (size_t i = 0; i < spec_labels_size; ++i) {
-      std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
-      for (const uint32_t l : beam) {
-        std::cout << std::endl << ">>> Vamana Post R = " << r << ", " << "L = " << l << std::endl;
-        // run_post_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_init, size_step, size_max, ps, q, F_b, F_q, filtered_gt);
-        run_post_vamana(vamana_index, k, l, q, F_b, Fqs[i], filtered_gts[i]);
-      }
-    }
-  }
+  // std::cout << ">>> Vamana Post Processing >>>" << std::endl;
+  // for (const uint32_t r : R) {
+  //   const auto &vamana_index = run_vamana_insert<U>(dim, r, 100, alpha, batch_base, size_init, size_step, size_max, ps);
+  //   for (size_t i = 0; i < spec_labels_size; ++i) {
+  //     std::cout << ">> Round: " << i + 1 << ", Label Value: " << gt_labels[i] << ", Label Num: " << P_b[gt_labels[i]].size() << std::endl;
+  //     for (const uint32_t l : beam) {
+  //       std::cout << std::endl << ">>> Vamana Post R = " << r << ", " << "L = " << l << std::endl;
+  //       // run_post_vamana<U>(dim, r, 100, alpha, batch_base, k, l, size_init, size_step, size_max, ps, q, F_b, F_q, filtered_gt);
+  //       run_post_vamana(vamana_index, k, l, q, F_b, Fqs[i], filtered_gts[i]);
+  //     }
+  //   }
+  // }
 
-  std::cout << ">>> Filtered HNSW >>>" << std::endl;
-  const auto &entrance = find_medoid(P_b, F_b.size(), 0.5);
-  const auto &filtered_hnsw_index = run_filtered_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps, F_b, entrance);
-  for (size_t i = 0; i < spec_labels_size; ++i) {
-    std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
-    for (const uint32_t ef : beam) {
-      std::cout << std::endl << ">>> Filtered HNSW M = " << m << ", " << "Ef = " << ef << std::endl;
-      // run_filtered_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, F_b, P_b, F_q, filtered_gt);
-      run_filtered_hnsw_search(filtered_hnsw_index, entrance, k, ef, q, Fqs[i], P_b, filtered_gts[i]);
-    }
-  }
+  // std::cout << ">>> Filtered HNSW >>>" << std::endl;
+  // const auto &entrance = find_medoid(P_b, F_b.size(), 0.5);
+  // std::cout << "Entrance point size: " << entrance.size() << std::endl;
+  // const auto &filtered_hnsw_index = run_filtered_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps, F_b, entrance);
+  // for (size_t i = 0; i < spec_labels_size; ++i) {
+  //   std::cout << ">> Round: " << i + 1 << ", Label Value: " << gt_labels[i] << ", Label Num: " << P_b[gt_labels[i]].size() << std::endl;
+  //   for (const uint32_t ef : beam) {
+  //     std::cout << std::endl << ">>> Filtered HNSW M = " << m << ", " << "Ef = " << ef << std::endl;
+  //     // run_filtered_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, F_b, P_b, F_q, filtered_gt);
+  //     run_filtered_hnsw_search(filtered_hnsw_index, entrance, k, ef, q, Fqs[i], P_b, filtered_gts[i]);
+  //   }
+  // }
 
-  std::cout << ">>> HNSW Post Processing >>>" << std::endl;
-  const auto &hnsw_index = run_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps);
-  for (size_t i = 0; i < spec_labels_size; ++i) {
-    std::cout << ">> Round: " << i + 1 << ", Label Value: " << spec_labels[i] << ", Label Num: " << P_b[spec_labels[i]].size() << std::endl;
-    for (const uint32_t ef : beam) {
-      std::cout << std::endl << ">>> HNSW Post M = " << m << ", " << "Ef = " << ef << std::endl;
-      // run_post_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, F_b, F_q, filtered_gt);
-      run_post_hnsw(hnsw_index, k, ef, q, F_b, Fqs[i], filtered_gts[i]);
-    }
-  }
+  // std::cout << ">>> HNSW Post Processing >>>" << std::endl;
+  // // const auto &hnsw_index = run_hnsw_insert<U>(dim, ml, m, efc, alpha, batch_base, size_init, size_step, size_max, ps);
+  // for (size_t i = 0; i < spec_labels_size; ++i) {
+  //   std::cout << ">> Round: " << i + 1 << ", Label Value: " << gt_labels[i] << ", Label Num: " << P_b[gt_labels[i]].size() << std::endl;
+  //   for (const uint32_t ef : beam) {
+  //     std::cout << std::endl << ">>> HNSW Post M = " << m << ", " << "Ef = " << ef << std::endl;
+  //     // run_post_hnsw<U>(dim, ml, m, efc, alpha, batch_base, k, ef, size_init, size_step, size_max, ps, q, F_b, F_q, filtered_gt);
+  //     run_post_hnsw(hnsw_index, k, ef, q, F_b, Fqs[i], filtered_gts[i]);
+  //   }
+  // }
 }
 
 int main(int argc, char **argv) {

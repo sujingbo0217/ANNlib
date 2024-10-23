@@ -85,8 +85,11 @@ class filtered_hnsw : public HNSW<Desc> {
 
  public:
   template<typename Iter>
+  void insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F, float batch_base = 2);
+
+  template<typename Iter, class E>
   void insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F,
-              float batch_base = 2);
+              const E &medoid, float batch_base = 2);
 
   template<class Seq = seq<result_t>>
   Seq search(const coord_t &cq, uint32_t k, uint32_t ef, const std::vector<label_t> &F,
@@ -325,6 +328,63 @@ void filtered_hnsw<Desc>::insert(Iter begin, Iter end, const std::vector<std::ve
   // per_visited.clear();
   // per_eval.clear();
   // per_size_C.clear();
+}
+
+template<class Desc>
+template<typename Iter, class E>
+void filtered_hnsw<Desc>::insert(Iter begin, Iter end, const std::vector<std::vector<label_t>> &F,
+                                 const E &medoid, float batch_base) {
+  static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
+  static_assert(std::is_base_of_v<std::random_access_iterator_tag,
+                                  typename std::iterator_traits<Iter>::iterator_category>);
+
+  const size_t n = std::distance(begin, end);
+  if (n == 0) return;
+  assert(F.size() == n);
+
+  auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto) {
+    return *(begin + i /*perm[i]*/);
+  });
+
+  // size_t cnt_skip = 0;
+  if (layer_b.empty()) {
+    const auto level_ep = gen_level();
+    auto init = begin + medoid[0];
+    const nid_t ep = id_map.insert(init->get_id());
+    layer_b.add_node(ep, node_fat{level_ep, init->get_coord(), F[medoid[0]]});
+    if (level_ep > 0) {
+      layer_u.resize(level_ep + 1);
+      for (uint32_t l = level_ep; l > 0; --l) layer_u[l].add_node(ep, node_lite{});
+    }
+    // entrance.push_back(ep);
+    // cnt_skip = 1;
+
+    seq<typename std::iterator_traits<decltype(begin)>::value_type> nids(medoid.size());
+    std::vector<std::vector<label_t>> ls(medoid.size());
+    cm::parallel_for(0, nids.size(), [&](size_t i) {
+      nids[i] = *(begin + medoid[i]);
+      ls[i] = F[medoid[i]];
+    });
+
+    insert_batch_impl(nids.begin(), nids.end(), ls);
+    entrance = medoid;
+  }
+
+  size_t batch_begin = 0, batch_end = 0/*cnt_skip*/, size_limit = std::max<size_t>(n * 0.02, 20000);
+  // float progress = 0.0;
+
+  while (batch_end < n) {
+    batch_begin = batch_end;
+    batch_end = std::min<size_t>(
+        {n, (size_t)std::ceil(batch_begin * batch_base) + 1, batch_begin + size_limit});
+
+    util::debug_output("Batch insertion: [%u, %u)\n", batch_begin, batch_end);
+
+    auto subrange = std::ranges::subrange(F.begin() + batch_begin, F.begin() + batch_end);
+    std::vector new_labels(subrange.begin(), subrange.end());
+
+    insert_batch_impl(rand_seq.begin() + batch_begin, rand_seq.begin() + batch_end, new_labels);
+  }
 }
 
 template<class Desc>
