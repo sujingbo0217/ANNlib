@@ -294,78 +294,74 @@ inline std::pair<std::vector<std::vector<L>>,
                  std::variant<std::unordered_map<L, std::vector<pid_t>>,
                               std::vector<std::pair<L, std::vector<pid_t>>>>>
 load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
-  auto [fileptr, length] = mmapStringFromFile(file_path);
+  // auto [fileptr, length] = mmapStringFromFile(file_path);
 
-  const uint32_t cnt_points = *reinterpret_cast<uint32_t *>(fileptr);
-  const uint32_t num_points =
-      (max_size == 0 ? cnt_points : std::min<uint32_t>(max_size, cnt_points));
-  const L *data_ptr = reinterpret_cast<const L *>(fileptr + sizeof(L));
-
-  std::vector<std::vector<L>> F(num_points);
-  std::unordered_map<L, std::vector<pid_t>> P;
-  size_t total_labels = 0;
-  const L separater = -1;
-
-  for (uint32_t i = 0; i < num_points; ++i) {
-    std::vector<L> node_labels;
-    // while (*data_ptr != std::numeric_limits<uint32_t>::max() - 1) {
-    while (*data_ptr != separater) {
-      L label = *data_ptr++;
-      node_labels.push_back(label);
-      P[label].push_back(static_cast<pid_t>(i));
-    }
-    data_ptr++;
-    // std::sort(node_labels.begin(), node_labels.end());
-    F[i] = node_labels;
-    total_labels += node_labels.size();
-  }
-
-  munmap(fileptr, length);
-
-  // std::ifstream file(file_path);
-  // if (!file) {
-  //   std::cerr << "Error: Unable to open file " << file_path << std::endl;
-  //   exit(-1);
-  // }
-  // std::string line;
-  // std::getline(file, line);
-  // std::istringstream num_points_iss(line);
-
-  // size_t num_points;
-  // num_points_iss >> num_points;
-  // num_points = (max_size == 0 ? num_points : max_size);
-  // // max_size = std::min<size_t>(max_size, num_points);
+  // const uint32_t cnt_points = *reinterpret_cast<uint32_t *>(fileptr);
+  // const uint32_t num_points =
+  //     (max_size == 0 ? cnt_points : std::min<uint32_t>(max_size, cnt_points));
+  // const L *data_ptr = reinterpret_cast<const L *>(fileptr + sizeof(L));
 
   // std::vector<std::vector<L>> F(num_points);
   // std::unordered_map<L, std::vector<pid_t>> P;
-  // size_t i = 0;
   // size_t total_labels = 0;
+  // const L separater = -1;
 
-  // while (i < num_points) {
-  //   std::getline(file, line);
+  // for (uint32_t i = 0; i < num_points; ++i) {
   //   std::vector<L> node_labels;
-  //   std::istringstream node_iss(line);
-  //   L label;
-  //   char comma;
-  //   while (node_iss >> label) {
+  //   // while (*data_ptr != std::numeric_limits<uint32_t>::max() - 1) {
+  //   while (*data_ptr != separater) {
+  //     L label = *data_ptr++;
   //     node_labels.push_back(label);
   //     P[label].push_back(static_cast<pid_t>(i));
-  //     node_iss >> comma;
   //   }
-  //   std::sort(node_labels.begin(), node_labels.end());
-  //   // F.push_back(node_labels);
+  //   data_ptr++;
+  //   // std::sort(node_labels.begin(), node_labels.end());
   //   F[i] = node_labels;
   //   total_labels += node_labels.size();
-  //   ++i;
   // }
-  // file.close();
+
+  // munmap(fileptr, length);
+
+  std::ifstream file(file_path);
+  if (!file) {
+    std::cerr << "Error: Unable to open file " << file_path << std::endl;
+    exit(-1);
+  }
+
+  std::string line;
+  std::vector<std::vector<L>> F;
+  std::unordered_map<L, std::vector<pid_t>> P;
+  
+  uint32_t total_labels = 0;
+  uint32_t num_points = 0;
+
+  while (std::getline(file, line) && num_points < max_size) {
+    std::vector<L> labels;
+    std::istringstream line_stream(line);
+    L label;
+    char comma;
+
+    while (line_stream >> label) {
+      labels.push_back(label);
+      P[label].push_back(static_cast<pid_t>(num_points));
+      line_stream >> comma;
+    }
+
+    F.push_back(labels);
+    total_labels += static_cast<uint32_t>(labels.size());
+    ++num_points;
+  }
+
+  file.close();
+
+  assert(num_points >= max_size);
 
   if (std::string(file_path).find("query") == std::string::npos) {
     // base label file
     std::cout << "Total labels: " << total_labels << std::endl;
     std::cout << "Total label values: " << P.size() << std::endl;
-    std::cout << std::fixed << std::setprecision(2)
-              << "Filters per Point: " << (float)total_labels / (float)num_points << std::endl;
+    std::cout << std::fixed << std::setprecision(4)
+              << "Filters per Point: " << static_cast<float>(total_labels) / num_points << std::endl;
   }
 
   if (!ret_pair) {
@@ -385,7 +381,7 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
 }
 
 template<class GT>
-void write_to_bin(const char *file, const GT &gt, uint32_t dim) {
+void write_to_bin(const char *file, const GT &gt, uint32_t k) {
   std::ofstream out_file(file, std::ios::binary);
   if (!out_file) {
     throw std::runtime_error("Could not open file for writing");
@@ -393,10 +389,13 @@ void write_to_bin(const char *file, const GT &gt, uint32_t dim) {
 
   uint32_t n = gt.size();
   out_file.write(reinterpret_cast<const char *>(&n), sizeof(n));
-  out_file.write(reinterpret_cast<const char *>(&dim), sizeof(dim));
+  out_file.write(reinterpret_cast<const char *>(&k), sizeof(k));
 
   for (const auto &it : gt) {
-    out_file.write(reinterpret_cast<const char *>(&it), sizeof(decltype(it)) * dim);
+    if (it.size() != k) {
+      throw std::runtime_error("Each point needs k GTs");
+    }
+    out_file.write(reinterpret_cast<const char *>(it.begin()), k * sizeof(typename GT::value_type::value_type));
   }
 
   out_file.close();
