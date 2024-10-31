@@ -9,6 +9,7 @@
 #include <set>
 #include <unordered_set>
 #include <utility>
+#include <ranges>
 
 #include "ANN.hpp"
 #include "custom/custom.hpp"
@@ -44,7 +45,7 @@ auto beamSearch2(
 	E &&f_nbhs, D &&f_dist, const Seq &eps, uint32_t ef, const search_control &ctrl={})
 {
 	using cm = custom<typename L::type>;
-	using nid_t = typename Seq::value_type;
+	using nid_t = std::ranges::range_value_t<Seq>;
 	using conn = util::conn<nid_t>;
 
 	const auto nid_invalid = std::numeric_limits<nid_t>::max();
@@ -119,7 +120,7 @@ auto beamSearch(
 	E &&f_nbhs, D &&f_dist, const Seq &eps, uint32_t ef, const search_control &ctrl={})
 {
 	using cm = custom<typename L::type>;
-	using nid_t = typename Seq::value_type;
+	using nid_t = std::ranges::range_value_t<Seq>;
 	using conn = util::conn<nid_t>;
 
 	const auto nid_invalid = std::numeric_limits<nid_t>::max();
@@ -221,14 +222,14 @@ template<class L = lookup_custom_tag<>, class E, class D, class G, class Seq, cl
 auto beamSearch(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef,
                 const Label &F, const search_control &ctrl = {}) {
   using cm = custom<typename L::type>;
-  using nid_t = typename Seq::value_type;
+  using nid_t = std::ranges::range_value_t<Seq>;
   using conn = util::conn<nid_t>;
   using label_t = typename Label::value_type;
 
   const auto nid_invalid = std::numeric_limits<nid_t>::max();
   const uint32_t bits = ef > 2 ? std::ceil(std::log2(ef)) * 2 - 2 : 2;
   const uint32_t mask = (1u << bits) - 1;
-  Seq visited(mask + 1, nid_invalid);
+  typename cm::seq<nid_t> visited(mask + 1, nid_invalid);
   uint32_t cnt_visited = 0;
   typename cm::seq<conn> workset;
   std::set<conn> cand;               // TODO: test dual heaps
@@ -312,7 +313,7 @@ template<class L = lookup_custom_tag<>, class E, class D, class G, class Seq, cl
 auto beamSearch3(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &medoid, uint32_t ef,
                 const Label &F, const search_control &ctrl = {}) {
   using cm = custom<typename L::type>;
-  using nid_t = typename Seq::value_type;
+  using nid_t = std::ranges::range_value_t<Seq>;
   using conn = util::conn<nid_t>;
   using label_t = typename Label::value_type;
 
@@ -425,9 +426,9 @@ auto beamSearch3(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &medoid, uint32_
     template<class L = lookup_custom_tag<>, class Seq>
     Seq prune_simple(Seq cand, uint32_t size, const prune_control &ctrl = {}) {
       (void)ctrl;
-      using nid_t = detail::second_elem_t<typename Seq::value_type>;
+      using nid_t = detail::second_elem_t<std::ranges::range_value_t<Seq>>;
       using conn = util::conn<nid_t>;
-      static_assert(std::is_same_v<typename Seq::value_type, conn>);
+      static_assert(std::is_same_v<std::ranges::range_value_t<Seq>, conn>);
 
       if (cand.size() > size) {
         std::nth_element(cand.begin(), cand.begin() + size, cand.end());
@@ -440,9 +441,9 @@ auto beamSearch3(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &medoid, uint32_
     auto /*Seq*/ prune_heuristic(Seq cand, uint32_t size, E &&f_nbhs, D &&f_dist,
                                  const prune_control &ctrl = {}) {
       using cm = custom<typename L::type>;
-      using nid_t = detail::second_elem_t<typename Seq::value_type>;
+      using nid_t = detail::second_elem_t<std::ranges::range_value_t<Seq>>;
       using conn = util::conn<nid_t>;
-      static_assert(std::is_same_v<typename Seq::value_type, conn>);
+      static_assert(std::is_same_v<std::ranges::range_value_t<Seq>, conn>);
       /*
       if(ctrl.extend_nbh)
       {
