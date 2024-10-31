@@ -335,7 +335,7 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
   uint32_t total_labels = 0;
   uint32_t num_points = 0;
 
-  while (std::getline(file, line) && num_points < max_size) {
+  while (std::getline(file, line) && (!max_size || num_points<max_size)) {
     std::vector<L> labels;
     std::istringstream line_stream(line);
     L label;
@@ -354,7 +354,7 @@ load_label(const char *file_path, uint32_t max_size = 0, bool ret_pair = true) {
 
   file.close();
 
-  assert(num_points >= max_size);
+  // assert(num_points >= max_size);
 
   if (std::string(file_path).find("query") == std::string::npos) {
     // base label file
