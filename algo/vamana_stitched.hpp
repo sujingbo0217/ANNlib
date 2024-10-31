@@ -1,6 +1,7 @@
 #ifndef _ANN_ALGO_STITCHED_VAMANA_HPP
 #define _ANN_ALGO_STITCHED_VAMANA_HPP
 
+#include <utility>
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -165,7 +166,7 @@ class stitched_vamana : public vamana<Desc> {
 
  public:
   graph_t g;
-  seq<nid_t> entrance;  // To init
+  std::unordered_map<label_t,nid_t> entrance;  // To init
   map::direct<pid_t, nid_t> id_map;
 
  private:
@@ -272,9 +273,11 @@ class stitched_vamana : public vamana<Desc> {
 template<class Desc>
 template<typename Iter, class Label>
 void stitched_vamana<Desc>::insert(Iter begin, Iter end, const Label &F, float batch_base/*, bool filtered*/) {
+
   static_assert(std::is_same_v<typename std::iterator_traits<Iter>::value_type, point_t>);
   static_assert(std::is_base_of_v<std::random_access_iterator_tag,
                                   typename std::iterator_traits<Iter>::iterator_category>);
+  using namespace std::views;
 
   const size_t n = std::distance(begin, end);
   if (n == 0) return;
@@ -282,12 +285,38 @@ void stitched_vamana<Desc>::insert(Iter begin, Iter end, const Label &F, float b
 
   // std::random_device rd;
   // auto perm = cm::random_permutation(n /*, rd()*/);
-  auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto) {
-    return *(begin + i /*perm[i]*/);
-  });
-  // auto rand_label_seq =
-  //     util::delayed_seq(n, [&](size_t i) -> decltype(auto) { return *(F.begin() + perm[i]); });
+  auto perm = util::to<seq<size_t>>(
+    util::delayed_seq(n, [](size_t i){return i;})
+  );
 
+  auto f_full = cm::flatten(util::delayed_seq(F.size(), [&](size_t i){
+    return F[perm[i]] | transform([i](label_t l){
+      return std::pair(l, i);
+    });
+  }));
+  cm::sort(f_full.begin(), f_full.end());
+  auto f_missing = cm::pack(
+    f_full,
+    util::delayed_seq(f_full.size(), [&](size_t i){
+      label_t l = f_full[i].first;
+      return (i==0 || f_full[i-1].first!=l) && !entrance.contains(l);
+  }));
+
+  auto idx_cand = util::to<seq<size_t>>(
+    f_missing | transform([](const auto &f){return f.second;})
+  );
+  cm::sort(idx_cand.begin(), idx_cand.end());
+  auto idx_prio = cm::pack(
+    idx_cand,
+    util::delayed_seq(idx_cand.size(), [&](size_t i){
+      return i==0 || idx_cand[i-1]!=idx_cand[i];
+  }));
+
+  // TODO: validate perm
+  // auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto) {
+  //   return *(begin + perm[i]);
+  // });
+/*
   size_t cnt_skip = 0;
   if (g.empty()) {
     // const nid_t ep_init = id_map.insert(rand_seq.begin()->get_id());
@@ -299,21 +328,76 @@ void stitched_vamana<Desc>::insert(Iter begin, Iter end, const Label &F, float b
     entrance.push_back(ep);
     cnt_skip = 1;
   }
+*/
+  size_t cnt_skip = idx_prio.size();
 
-  size_t batch_begin = 0, batch_end = cnt_skip, size_limit = std::max<size_t>(n * 0.02, 20000);
+  id_map.insert(util::delayed_seq(
+    cnt_skip, [&](size_t i){return (begin+perm[idx_prio[i]])->get_id();}
+  ));
+  auto eps_missing = f_missing | transform([&](const auto &f){
+    const pid_t &pid = (begin+perm[f.second])->get_id();
+    nid_t nid = id_map.get_nid(pid);
+    return std::pair(f.first, nid);
+  });
+  entrance.insert(eps_missing.begin(), eps_missing.end());
+/*{
+  auto offset = std::lower_bound(idx_prio.begin(), idx_prio.end(), cnt_skip) - idx_prio.begin();
+  cm::parallel_for(0, offset, [&](size_t i){
+    perm[i] = perm[idx_prio[i]];
+  });
+  auto tmp = perm;
+  cm::parallel_for(offset, cnt_skip, [&](size_t i){
+    perm[i] = tmp[idx_prio[i]];
+    perm[idx_prio[i]] = perm[i];
+  });
+}*/
+  {
+/*
+    auto tmp = perm;
+    cm::parallel_for(0, idx_prio.size(), [&](size_t i){
+    // for(size_t i=0; i<idx_prio.size(); ++i){
+      tmp[i] = perm[idx_prio[i]];
+      tmp[idx_prio[i]] = perm[i];
+      // std::swap(perm[i], perm[idx_prio[i]]);
+    });
+    // perm = tmp;
+*/
+    for(size_t i=0; i<idx_prio.size(); ++i){
+      std::swap(perm[i], perm[idx_prio[i]]);
+    }
+/*
+    for(size_t i=0; i<idx_prio.size(); ++i){
+      assert(tmp[i] == tmp2[i]);
+    }
+*/
+  }
+  g.add_nodes(util::delayed_seq(cnt_skip, [&](size_t i){
+    nid_t nid = id_map.get_nid((begin+perm[i])->get_id());
+    // GUARANTEE: begin[*].get_coord is only invoked for assignment once
+    return std::pair{nid, node_t{(begin+perm[i])->get_coord(), F[perm[i]]}};
+    // return std::pair{nids[i], node_t{(begin + i)->get_coord(), *(F.begin() + i)}};
+  }));
+
+  size_t batch_begin = 0, batch_end = cnt_skip;
+  size_t batch_step = 0, size_limit = std::max<size_t>(n * 0.02, 20000);
   // float progress = 0.0;
+  auto rand_seq = util::delayed_seq(n, [&](size_t i) -> decltype(auto) {
+    return *(begin + perm[i]);
+  });
 
   while (batch_end < n) {
     batch_begin = batch_end;
-    batch_end = std::min<size_t>(
-        {n, (size_t)std::ceil(batch_begin * batch_base) + 1, batch_begin + size_limit});
+    batch_step = std::min((size_t)std::ceil(batch_step*batch_base+1), size_limit);
+    batch_end = std::min<size_t>(n, batch_begin+batch_step);
 
     // std::cerr << "(batch_begin, batch_end)" << batch_begin << " " << batch_end << '\n';
 
     util::debug_output("Batch insertion: [%u, %u)\n", batch_begin, batch_end);
     // insert_batch_impl(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end);
-    auto subrange = std::ranges::subrange(F.begin() + batch_begin, F.begin() + batch_end);
-    std::vector new_labels(subrange.begin(), subrange.end());
+    auto new_labels = util::delayed_seq(batch_end-batch_begin, [&](size_t i){
+      return F[perm[i+batch_begin]];
+    });
+    // insert_batch_impl(rand_seq.begin() + batch_begin, rand_seq.begin() + batch_end, new_labels/*, filtered*/);
     insert_batch_impl(rand_seq.begin() + batch_begin, rand_seq.begin() + batch_end, new_labels/*, filtered*/);
     // insert(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end, false);
 
@@ -365,13 +449,14 @@ void stitched_vamana<Desc>::insert2(Iter begin, Iter end, const Label &F, const 
   size_t cnt_skip = 0;
   assert(!g.empty());
 
-  size_t batch_begin = 0, batch_end = cnt_skip, size_limit = std::max<size_t>(n * 0.02, 20000);
+  size_t batch_begin = 0, batch_end = cnt_skip;
+  size_t batch_step = 0, size_limit = std::max<size_t>(n * 0.02, 20000);
   // float progress = 0.0;
 
   while (batch_end < n) {
     batch_begin = batch_end;
-    batch_end = std::min<size_t>(
-        {n, (size_t)std::ceil(batch_begin * batch_base) + 1, batch_begin + size_limit});
+    batch_step = std::min((size_t)std::ceil(batch_step*batch_base+1), size_limit);
+    batch_end = std::min<size_t>(n, batch_begin+batch_step);
 
     // std::cerr << "(batch_begin, batch_end)" << batch_begin << " " << batch_end << '\n';
 
@@ -424,8 +509,9 @@ void stitched_vamana<Desc>::insert_batch_impl(Iter begin, Iter end, const Label 
     sctrl.log_per_stat = i;
     // sctrl.filtered = filtered;
     // sctrl.searching = false;
+    auto eps = F[i] | std::views::transform([&](label_t l){return entrance.at(l);});
     seq_conn res =
-        algo::beamSearch(gen_f_nbhs(), gen_f_dist(u), get_f_label(), entrance, L, F[i], sctrl);
+        algo::beamSearch(gen_f_nbhs(), gen_f_dist(u), get_f_label(), eps, L, F[i], sctrl);
 
     prune_control pctrl;  // TODO: use designated intializers in C++20
     pctrl.alpha = alpha;
@@ -569,7 +655,8 @@ Seq stitched_vamana<Desc>::search(const coord_t &cq, uint32_t k, uint32_t ef,
                                   const std::vector<label_t> &F, const search_control &ctrl) const {
   // seq<nid_t> eps = entrance;
   // auto nbhs = beamSearch(gen_f_nbhs(), gen_f_dist(cq), eps, ef, ctrl);
-  auto nbhs = algo::beamSearch(gen_f_nbhs(), gen_f_dist(cq), get_f_label(), entrance, ef, F, ctrl);
+  auto eps = F | std::views::transform([&](label_t l){return entrance.at(l);});
+  auto nbhs = algo::beamSearch(gen_f_nbhs(), gen_f_dist(cq), get_f_label(), eps, ef, F, ctrl);
 
   cm::sort(nbhs.begin(), nbhs.end());
   nbhs = algo::prune_simple(std::move(nbhs), k /*, ctrl*/);  // TODO: set ctrl
