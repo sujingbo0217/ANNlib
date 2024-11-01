@@ -276,7 +276,7 @@ void run_test(commandLine parameter)  // intend to be pass-by-value manner
       filtered_gts[i] = get_gt<U>(ps, q, dim, k, F_b, Fqs[i]);
       if (gt_paths.size() - 1 >= spec_labels_size) {
         std::cout << "Writing ground truth to " << std::string(gt_paths[i + 1]) << "..." << std::endl << std::endl;
-        write_to_bin(gt_paths[i + 1].c_str(), filtered_gts[i], dim);
+        write_to_bin(gt_paths[i + 1].c_str(), filtered_gts[i], k);
       }
     }
   // });
