@@ -112,6 +112,12 @@ public:
 		return parlay::pack_index(std::forward<Seq>(seq));
 	}
 
+	template<class Seq, class BSeq>
+	static auto pack(Seq &&seq, BSeq &&bseq)
+	{
+		return parlay::pack(std::forward<Seq>(seq), std::forward<BSeq>(bseq));
+	}
+
 	template<class Seq>
 	static auto flatten(Seq &&seq)
 	{
