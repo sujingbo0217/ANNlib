@@ -218,6 +218,29 @@ auto beamSearch(
 	return std::make_pair(frontier, visited);
 }
 
+namespace detail{
+template<class Seq1, class Seq2, class Comp=std::less<>>
+bool is_intersected(const Seq1 &s1, const Seq2 &s2, Comp comp={})
+{
+  auto first1 = std::ranges::begin(s1);
+  auto last1 = std::ranges::end(s1);
+  auto first2 = std::ranges::begin(s2);
+  auto last2 = std::ranges::end(s2);
+  while(first1!=last1 && first2!=last2)
+  {
+    if (comp(*first1, *first2))
+      ++first1;
+    else
+    {
+      if (!comp(*first2, *first1))
+        return true;
+      ++first2;
+    }
+  }
+  return false;
+}
+}
+
 template<class L = lookup_custom_tag<>, class E, class D, class G, class Seq, class Label>
 auto beamSearch(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef,
                 const Label &F, const search_control &ctrl = {}) {
@@ -241,11 +264,8 @@ auto beamSearch(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef
   for (nid_t pe : eps) {
     // P: base, F: query
     const Label &P = f_label(pe);
-    // Label inter;
-    typename cm::seq<label_t> inter;
-    std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
     // if ((ctrl.filtered && !ctrl.searching) || inter.size() > 0) {
-    if (inter.size() > 0) {
+    if (detail::is_intersected(P,F)) {
       visited[cm::hash64(pe) & mask] = pe;
       const auto d = f_dist(pe);
       cand.insert({d, pe});
@@ -279,11 +299,8 @@ auto beamSearch(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef
       if (!is_inw.insert(pv).second) return;
 
       Label P = f_label(pv);
-      // Label inter;
-      typename cm::seq<label_t> inter;
-      std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
       // if ((ctrl.filtered && !ctrl.searching) || inter.size() > 0) {
-      if (inter.size() > 0) {
+      if (detail::is_intersected(P,F)) {
         cand.insert({d, pv});
         workset.push_back({d, pv});
         std::push_heap(workset.begin(), workset.end());
@@ -339,11 +356,8 @@ auto beamSearch3(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &medoid, uint32_
   for (nid_t ep : eps) {
     // P: base, F: query
     const Label &P = f_label(ep);
-    // Label inter;
-    typename cm::seq<label_t> inter;
-    std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
     // if ((ctrl.filtered && !ctrl.searching) || inter.size() > 0) {
-    if (inter.size() > 0) {
+    if (detail::is_intersected(P,F)) {
       visited[cm::hash64(ep) & mask] = ep;
       const auto d = f_dist(ep);
       cand.insert({d, ep});
@@ -377,11 +391,8 @@ auto beamSearch3(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &medoid, uint32_
       if (!is_inw.insert(pv).second) return;
 
       Label P = f_label(pv);
-      // Label inter;
-      typename cm::seq<label_t> inter;
-      std::set_intersection(P.begin(), P.end(), F.begin(), F.end(), std::back_inserter(inter));
       // if ((ctrl.filtered && !ctrl.searching) || inter.size() > 0) {
-      if (inter.size() > 0) {
+      if (detail::is_intersected(P,F)) {
         cand.insert({d, pv});
         workset.push_back({d, pv});
         std::push_heap(workset.begin(), workset.end());
