@@ -262,6 +262,8 @@ auto beamSearch(E &&f_nbhs, D &&f_dist, G &&f_label, const Seq &eps, uint32_t ef
   workset.reserve(ef + 1);
 
   for (nid_t pe : eps) {
+    const auto h_pe = cm::hash64(pe) & mask;
+    if (visited[h_pe]==pe) continue;
     // P: base, F: query
     const Label &P = f_label(pe);
     // if ((ctrl.filtered && !ctrl.searching) || inter.size() > 0) {
