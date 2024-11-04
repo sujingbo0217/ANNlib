@@ -419,29 +419,37 @@ inline auto load_label_helper(auto type, const char *file_label_in, const char *
   return std::make_tuple(F_b, P_b, F_q, P_q);
 }
 
-template<class Map, typename Nid = uint32_t>
-auto find_medoid(Map P_b, const size_t n_b, float tau = 0.5) {
+template<class Map, typename Nid = uint32_t, typename Label = int32_t>
+auto find_medoid(const Map &P_b, const size_t n_b, float tau = 0.5) {
   // std::unordered_map<Nid, uint32_t> T;
-  // std::unordered_map<label_t, nid_t> M; // M mapping filters to start nodes
-  // std::vector<std::pair<Label, std::vector<Nid>>> P(P_b.begin(), P_b.end());
+  std::unordered_map<Label, Nid> M; // M mapping filters to start nodes
 
   parlay::sequence<uint32_t> T(n_b, 0); // T is intended as a counter
-  parlay::sequence<typename decltype(P_b)::mapped_type> P(P_b.size());
-  // std::vector<std::pair<typename decltype(P_b)::key_type, typename decltype(P_b)::mapped_type>> P(P_b.begin(), P_b.end());
+  // parlay::sequence<typename decltype(P_b)::mapped_type> P(P_b.size());
+  // std::transform(P_b.begin(), P_b.end(), P.begin(), [](const auto& pair) {
+  //   return pair.second;
+  // });
+
+  // parlay::sequence<std::pair<typename decltype(P_b)::key_type, typename decltype(P_b)::mapped_type>> P(P_b.size());
+  parlay::sequence<std::pair<
+    typename std::remove_reference_t<decltype(P_b)>::key_type, 
+    typename std::remove_reference_t<decltype(P_b)>::mapped_type
+  >> P(P_b.size());
   std::transform(P_b.begin(), P_b.end(), P.begin(), [](const auto& pair) {
-    return pair.second;
+    return pair;
   });
 
   auto rng = std::default_random_engine{};
   parlay::sequence<Nid> eps(P.size());
 
   parlay::parallel_for(0, P.size(), [&](size_t i) {
-    auto nids = P[i];  // vector
-    if ((size_t)(nids.size() * tau) <= 1) {
-      assert((size_t)nids[0] < n_b);
-      T[nids[0]] += 1;    //! test: non-atomic operation
+    auto Pf = P[i].second;  // vector of label
+    if ((size_t)(Pf.size() * tau) <= 1) {
+      assert((size_t)Pf[0] < n_b);
+      eps[i] = Pf[0];
+      T[Pf[0]] += 1;    //! test: non-atomic operation
     } else {
-      auto Pf = nids;
+      // auto Pf = nids;
       std::shuffle(Pf.begin(), Pf.end(), rng);
       const size_t m = Pf.size();
       const size_t rdm = (size_t)(m * tau);
@@ -461,5 +469,9 @@ auto find_medoid(Map P_b, const size_t n_b, float tau = 0.5) {
     }
   });
 
-  return eps;
+  for (size_t i = 0; i < P.size(); ++i) {
+    M[P[i].first] = eps[i];
+  }
+
+  return std::make_pair(eps, M);
 }

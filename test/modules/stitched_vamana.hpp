@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <type_traits>
@@ -15,9 +16,11 @@
 #include "algo/algo.hpp"
 #include "algo/vamana_stitched.hpp"
 #include "graph/adj.hpp"
+#include "util/debug.hpp"
 #include "util/intrin.hpp"
 
 using ANN::stitched_vamana;
+using ANN::util::debug_output;
 
 template<class U, class S1, class S2, class S3>
 auto run_stitched_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float alpha,
@@ -33,19 +36,13 @@ auto run_stitched_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float al
   // constexpr bool filtered = false;
 
   auto Merge = [alpha, size_max](stitched_vamana<U> from, stitched_vamana<U> &to) -> void {
-    // entrance point set update
-    for (const auto &ep : from.entrance) {
-      to.entrance.push_back(ep);
-    }
-    std::sort(to.entrance.begin(), to.entrance.end());
-    to.entrance.erase(std::unique(to.entrance.begin(), to.entrance.end()), to.entrance.end());
 
     const auto mapping = from.id_map.get_map();
 
     std::vector<std::pair<nid_t, pid_t>> existed_nodes, missing_nodes;
 
     for (const auto &node : mapping) {
-      if (!to.id_map.has_node(node.first)) {
+      if (!to.id_map.contain_nid(node.first)) {
         missing_nodes.push_back(node);
       } else {
         existed_nodes.push_back(node);
@@ -55,7 +52,7 @@ auto run_stitched_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float al
     size_t n = missing_nodes.size();
     size_t m = existed_nodes.size();
 
-    printf("Missing node num: %lu, Existed node num: %lu\n", n, m);
+    debug_output("Missing node num: %lu, Existed node num: %lu\n", n, m);
 
     typename stitched_vamana<U>::seq<std::pair<nid_t, seq_edge>> nbh_missing(n), nbh_existed(m);
 
@@ -70,7 +67,7 @@ auto run_stitched_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float al
     // parallelism
     cm::parallel_for(0, n, [&](size_t i) {
       auto [nid, pid] = missing_nodes[i];
-      assert(pid < size_max && to.id_map.has_node(nid));
+      assert(pid < size_max && to.id_map.contain_nid(nid));
       auto edges = from.g.get_edges(nid);
       // no need to prune
       nbh_missing[i] = std::make_pair(nid, edges);
@@ -100,7 +97,7 @@ auto run_stitched_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float al
   sort(Pb.begin(), Pb.end(),
        [&](const std::pair<label_t, std::vector<nid_t>> &a,
            const std::pair<label_t, std::vector<nid_t>> &b) {
-         return a.second.size() < b.second.size();
+         return a.second.size() > b.second.size();
        });
   const size_t n_unique_label = Pb.size();
   stitched_vamana<U> base(dim, m + 32, efc + 50, alpha);  // R = R_small + 32, L = L_small + 50
@@ -114,7 +111,7 @@ auto run_stitched_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float al
   for (const auto &[f, Pf] : Pb) {
     // if (Pf.size() == 1 && Pf[0] == 0) continue;
     size_t n = Pf.size();
-    printf("Number of points w/ label [%u]: %lu\n", f, n);
+    debug_output("Number of points w/ label [%u]: %lu\n", f, n);
     S1 new_ps(n);
     std::vector<std::vector<label_t>> base_labels(n);
 
@@ -131,7 +128,9 @@ auto run_stitched_vamana_insert(uint32_t dim, uint32_t m, uint32_t efc, float al
     g.insert(ins_begin, ins_end, base_labels, batch_base /*, filtered*/);
 
     Merge(g, base);
-    printf("Inserted points w/ label: %lu/%lu\n", ++idx, n_unique_label);
+
+    // TODO: progress bar
+    debug_output("Inserted points w/ label: %lu/%lu\n", ++idx, n_unique_label);
   }
 
   puts("Collect statistics");
