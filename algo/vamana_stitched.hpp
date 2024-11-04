@@ -371,12 +371,31 @@ void stitched_vamana<Desc>::insert(Iter begin, Iter end, const Label &F, float b
     }
 */
   }
+
+  auto nids = util::to<seq<nid_t>>(util::delayed_seq(cnt_skip, [&](size_t i){
+    return id_map.get_nid((begin+perm[i])->get_id());
+  }));
+
   g.add_nodes(util::delayed_seq(cnt_skip, [&](size_t i){
-    nid_t nid = id_map.get_nid((begin+perm[i])->get_id());
+    // nid_t nid = id_map.get_nid((begin+perm[i])->get_id());
     // GUARANTEE: begin[*].get_coord is only invoked for assignment once
-    return std::pair{nid, node_t{(begin+perm[i])->get_coord(), F[perm[i]]}};
+    return std::pair{nids[i], node_t{(begin+perm[i])->get_coord(), F[perm[i]]}};
     // return std::pair{nids[i], node_t{(begin + i)->get_coord(), *(F.begin() + i)}};
   }));
+
+  seq<std::pair<nid_t, seq_edge>> nbh_eps(cnt_skip);
+  cm::parallel_for(0, cnt_skip, [&](size_t i){
+    seq_conn res = util::to<seq_conn>(util::delayed_seq(cnt_skip, [&](size_t j){
+      nid_t u=nids[i], v=nids[j];
+      const auto &cu = g.get_node(u)->get_coord();
+      const auto &cv = g.get_node(v)->get_coord();
+      // NOTE: self circle
+      return conn{Desc::distance(cu,cv,dim), v};
+    }));
+    seq_conn conn_u = algo::prune_simple(std::move(res), get_deg_bound());
+    nbh_eps[i] = {nids[i], edge_cast(std::move(conn_u))};
+  });
+  g.set_edges(std::move(nbh_eps));
 
   size_t batch_begin = 0, batch_end = cnt_skip;
   size_t batch_step = 0, size_limit = std::max<size_t>(n * 0.02, 20000);
